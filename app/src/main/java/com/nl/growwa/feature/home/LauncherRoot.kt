@@ -173,12 +173,16 @@ fun LauncherRoot(
                     },
             ) {
                 AppDrawer(
-                    apps = ui.allApps,
+                    apps = ui.mainApps,
+                    privateApps = ui.privateApps,
+                    privateSpace = ui.privateSpace,
                     settings = ui.settings,
                     onLaunch = { viewModel.launch(it); overlay = Overlay.NONE },
                     onAddToHome = { viewModel.addToHome(it, homePager.currentPage) },
                     onAddToDock = viewModel::addToDock,
                     onAppInfo = viewModel::openAppInfo,
+                    onLockPrivate = viewModel::lockPrivateSpace,
+                    onUnlockPrivate = viewModel::unlockPrivateSpace,
                 )
             }
         }
@@ -209,6 +213,7 @@ fun LauncherRoot(
                 settings = ui.settings,
                 onUpdate = viewModel::updateSettings,
                 loadIconPacks = viewModel::loadIconPacks,
+                privateSpaceAvailable = ui.privateSpace.available,
                 onClose = { overlay = Overlay.NONE },
             )
         }

@@ -12,6 +12,7 @@ import com.nl.growwa.core.model.AppInfo
 import com.nl.growwa.core.model.AppKey
 import com.nl.growwa.core.toImageBitmap
 import com.nl.growwa.data.iconpack.IconPackRepository
+import com.nl.growwa.data.privatespace.PrivateSpaceManager
 import com.nl.growwa.data.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,10 +35,12 @@ class AppRepository(
     private val scope: CoroutineScope,
     private val iconPackRepository: IconPackRepository,
     private val settingsRepository: SettingsRepository,
+    private val privateSpaceManager: PrivateSpaceManager,
 ) {
     @Volatile
     private var iconPackPkg: String = ""
     private val appContext = context.applicationContext
+    private val pm = appContext.packageManager
     private val launcherApps =
         appContext.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
     private val userManager =
@@ -78,6 +81,8 @@ class AppRepository(
         scope.launch {
             packageEvents.collect { refresh() }
         }
+        // Reload when Private Space is locked/unlocked or added/removed.
+        privateSpaceManager.addChangeListener { scope.launch { refresh() } }
     }
 
     private fun userSerial(user: UserHandle): Long =
@@ -85,16 +90,25 @@ class AppRepository(
 
     suspend fun refresh() = withContext(Dispatchers.Default) {
         val pack = iconPackPkg.takeIf { it.isNotBlank() }?.let { iconPackRepository.load(it) }
+        val privateUser = privateSpaceManager.privateUser()
         val profiles = launcherApps.profiles.ifEmpty { listOf(Process.myUserHandle()) }
         val result = mutableListOf<AppInfo>()
         for (user in profiles) {
+            val isPrivateProfile = privateUser != null && user == privateUser
             val activities = runCatching { launcherApps.getActivityList(null, user) }
                 .getOrDefault(emptyList())
             for (activity in activities) {
-                val themed = pack?.iconFor(activity.componentName, iconSizePx)
-                val icon = themed ?: runCatching {
-                    activity.getBadgedIcon(0).toImageBitmap(iconSizePx)
-                }.getOrNull() ?: continue
+                // Themed (icon pack) drawable if available; badge it for private/work profiles
+                // since the system badge isn't applied to pack icons. Fall back to the system's
+                // already-badged activity icon when the pack doesn't theme this app.
+                val themedDrawable = pack?.drawableFor(activity.componentName)
+                val icon = if (themedDrawable != null) {
+                    val badged =
+                        if (isPrivateProfile) pm.getUserBadgedIcon(themedDrawable, user) else themedDrawable
+                    runCatching { badged.toImageBitmap(iconSizePx) }.getOrNull()
+                } else {
+                    runCatching { activity.getBadgedIcon(0).toImageBitmap(iconSizePx) }.getOrNull()
+                } ?: continue
                 result += AppInfo(
                     key = AppKey(
                         packageName = activity.applicationInfo.packageName,
@@ -105,6 +119,7 @@ class AppRepository(
                     componentName = activity.componentName,
                     userHandle = user,
                     icon = icon,
+                    isPrivate = isPrivateProfile,
                 )
             }
         }

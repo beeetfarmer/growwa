@@ -15,6 +15,8 @@ import com.nl.growwa.data.iconpack.IconPackRepository
 import com.nl.growwa.data.layout.LayoutRepository
 import com.nl.growwa.data.layout.PlacementEntity
 import com.nl.growwa.data.layout.UsageRepository
+import com.nl.growwa.data.privatespace.PrivateSpaceManager
+import com.nl.growwa.data.privatespace.PrivateSpaceState
 import com.nl.growwa.data.settings.LauncherSettings
 import com.nl.growwa.data.settings.SettingsRepository
 import com.nl.growwa.data.settingsindex.SettingsActionRepository
@@ -36,7 +38,14 @@ data class LauncherUiState(
     val allApps: List<AppInfo> = emptyList(),
     val layout: ResolvedLayout = ResolvedLayout(),
     val topApps: List<AppInfo> = emptyList(),
-)
+    val privateSpace: PrivateSpaceState = PrivateSpaceState(),
+) {
+    /** Drawer's main grid: everything outside the private profile. */
+    val mainApps: List<AppInfo> get() = allApps.filter { !it.isPrivate }
+
+    /** Apps inside the private profile (empty while locked). */
+    val privateApps: List<AppInfo> get() = allApps.filter { it.isPrivate }
+}
 
 class LauncherViewModel(
     private val appRepository: AppRepository,
@@ -46,6 +55,7 @@ class LauncherViewModel(
     private val contactsRepository: ContactsRepository,
     private val settingsActionRepository: SettingsActionRepository,
     private val iconPackRepository: IconPackRepository,
+    private val privateSpaceManager: PrivateSpaceManager,
 ) : ViewModel() {
 
     val uiState: StateFlow<LauncherUiState> = combine(
@@ -53,12 +63,14 @@ class LauncherViewModel(
         settingsRepository.settings,
         layoutRepository.observe(),
         usageRepository.observe(),
-    ) { apps, settings, placements, usage ->
+        privateSpaceManager.state,
+    ) { apps, settings, placements, usage, privateSpace ->
         LauncherUiState(
             settings = settings,
             allApps = apps,
             layout = resolve(apps, placements),
-            topApps = usageRepository.topApps(usage, apps, limit = FINDER_TOP_COUNT),
+            topApps = usageRepository.topApps(usage, apps.filter { !it.isPrivate }, limit = FINDER_TOP_COUNT),
+            privateSpace = privateSpace,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LauncherUiState())
 
@@ -87,10 +99,17 @@ class LauncherViewModel(
 
     fun openAppInfo(app: AppInfo) = appRepository.openAppInfo(app)
 
+    // --- Private Space ---
+    fun lockPrivateSpace() = privateSpaceManager.setLocked(true)
+    fun unlockPrivateSpace() = privateSpaceManager.setLocked(false)
+
     // --- Finder search ---
     fun searchApps(query: String): List<AppInfo> {
         val q = query.trim()
-        return uiState.value.allApps.filter { it.label.contains(q, ignoreCase = true) }
+        // Private-profile apps never appear in Finder (extra guard; they're absent while locked).
+        return uiState.value.allApps.filter {
+            !it.isPrivate && it.label.contains(q, ignoreCase = true)
+        }
     }
 
     suspend fun searchContacts(query: String): List<ContactInfo> =
@@ -137,6 +156,7 @@ class LauncherViewModel(
                 container.contactsRepository,
                 container.settingsActionRepository,
                 container.iconPackRepository,
+                container.privateSpaceManager,
             ) as T
         }
     }

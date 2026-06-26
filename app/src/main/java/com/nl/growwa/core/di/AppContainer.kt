@@ -7,6 +7,7 @@ import com.nl.growwa.data.iconpack.IconPackRepository
 import com.nl.growwa.data.layout.LayoutDatabase
 import com.nl.growwa.data.layout.LayoutRepository
 import com.nl.growwa.data.layout.UsageRepository
+import com.nl.growwa.data.privatespace.PrivateSpaceManager
 import com.nl.growwa.data.settings.SettingsRepository
 import com.nl.growwa.data.settingsindex.SettingsActionRepository
 import kotlinx.coroutines.CoroutineScope
@@ -18,7 +19,9 @@ class AppContainer(context: Context) {
 
     val settingsRepository = SettingsRepository(context)
     val iconPackRepository = IconPackRepository(context)
-    val appRepository = AppRepository(context, appScope, iconPackRepository, settingsRepository)
+    val privateSpaceManager = PrivateSpaceManager(context)
+    val appRepository =
+        AppRepository(context, appScope, iconPackRepository, settingsRepository, privateSpaceManager)
     val contactsRepository = ContactsRepository(context)
     val settingsActionRepository = SettingsActionRepository()
 

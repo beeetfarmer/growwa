@@ -61,6 +61,7 @@ import com.nl.growwa.data.settings.AccentColor
 import com.nl.growwa.data.settings.DrawerSearch
 import com.nl.growwa.data.settings.GestureAction
 import com.nl.growwa.data.settings.LauncherSettings
+import com.nl.growwa.data.settings.PrivateSpacePosition
 import com.nl.growwa.data.settings.ThemeMode
 import com.nl.growwa.feature.gestures.GrowwaAccessibilityService
 import kotlin.math.roundToInt
@@ -70,6 +71,7 @@ fun SettingsScreen(
     settings: LauncherSettings,
     onUpdate: ((LauncherSettings) -> LauncherSettings) -> Unit,
     loadIconPacks: suspend () -> List<IconPackInfo>,
+    privateSpaceAvailable: Boolean,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -170,6 +172,21 @@ fun SettingsScreen(
                 onUpdate { it.copy(gestureDoubleTap = a) }
             }
             AccessibilityRow(settings)
+
+            if (privateSpaceAvailable) {
+                SectionHeader("Private space")
+                SwitchRow("Hide from app drawer", settings.hidePrivateSpace) { v ->
+                    onUpdate { it.copy(hidePrivateSpace = v) }
+                }
+                if (!settings.hidePrivateSpace) {
+                    ChipRow(
+                        title = "Tab bar position",
+                        options = PrivateSpacePosition.entries,
+                        selected = settings.privateSpacePosition,
+                        label = { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } },
+                    ) { pos -> onUpdate { it.copy(privateSpacePosition = pos) } }
+                }
+            }
 
             SectionHeader("System")
             Row(

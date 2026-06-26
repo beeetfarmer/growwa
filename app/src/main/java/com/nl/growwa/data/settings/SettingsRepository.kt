@@ -19,6 +19,9 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 /** Placement of the search bar inside the app drawer. */
 enum class DrawerSearch { OFF, TOP, BOTTOM }
 
+/** Where the Private Space section sits in the app drawer. */
+enum class PrivateSpacePosition { TOP, BOTTOM }
+
 /** Action a home-screen gesture can trigger. */
 enum class GestureAction(val label: String) {
     NONE("Nothing"),
@@ -59,6 +62,8 @@ data class LauncherSettings(
     val gestureSwipeUp: GestureAction = GestureAction.APP_DRAWER,
     val gestureSwipeDown: GestureAction = GestureAction.FINDER,
     val gestureDoubleTap: GestureAction = GestureAction.LOCK_SCREEN,
+    val privateSpacePosition: PrivateSpacePosition = PrivateSpacePosition.TOP,
+    val hidePrivateSpace: Boolean = false,
 ) {
     companion object {
         const val MAX_DOCK = 7
@@ -93,6 +98,8 @@ class SettingsRepository(private val context: Context) {
         val gestureSwipeUp = intPreferencesKey("gesture_swipe_up")
         val gestureSwipeDown = intPreferencesKey("gesture_swipe_down")
         val gestureDoubleTap = intPreferencesKey("gesture_double_tap")
+        val privateSpacePosition = intPreferencesKey("private_space_position")
+        val hidePrivateSpace = booleanPreferencesKey("hide_private_space")
     }
 
     private fun read(p: Preferences): LauncherSettings {
@@ -124,6 +131,9 @@ class SettingsRepository(private val context: Context) {
                 .getOrElse(p[Keys.gestureSwipeDown] ?: d.gestureSwipeDown.ordinal) { d.gestureSwipeDown },
             gestureDoubleTap = GestureAction.entries
                 .getOrElse(p[Keys.gestureDoubleTap] ?: d.gestureDoubleTap.ordinal) { d.gestureDoubleTap },
+            privateSpacePosition = PrivateSpacePosition.entries
+                .getOrElse(p[Keys.privateSpacePosition] ?: d.privateSpacePosition.ordinal) { d.privateSpacePosition },
+            hidePrivateSpace = p[Keys.hidePrivateSpace] ?: d.hidePrivateSpace,
         )
     }
 
@@ -149,6 +159,8 @@ class SettingsRepository(private val context: Context) {
             p[Keys.gestureSwipeUp] = next.gestureSwipeUp.ordinal
             p[Keys.gestureSwipeDown] = next.gestureSwipeDown.ordinal
             p[Keys.gestureDoubleTap] = next.gestureDoubleTap.ordinal
+            p[Keys.privateSpacePosition] = next.privateSpacePosition.ordinal
+            p[Keys.hidePrivateSpace] = next.hidePrivateSpace
         }
     }
 }

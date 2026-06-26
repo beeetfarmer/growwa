@@ -54,15 +54,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Pressing Home while already in the launcher delivers a new HOME intent.
+    // Pressing Home while already in the launcher delivers a new HOME intent — collapse
+    // overlays back to the home screen. We deliberately do NOT reset in onResume(), so that
+    // returning from a system activity (e.g. Private Space unlock, App Info) keeps the drawer
+    // open where the user left it.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        homeReset++
-    }
-
-    // Returning from a launched app: collapse any open overlay back to home.
-    override fun onResume() {
-        super.onResume()
         homeReset++
     }
 }

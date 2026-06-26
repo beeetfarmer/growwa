@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
+import android.graphics.drawable.Drawable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.core.content.res.ResourcesCompat
 import com.nl.growwa.core.model.IconPackInfo
@@ -19,15 +20,13 @@ class LoadedIconPack(
     private val resources: Resources,
     private val componentToDrawable: Map<String, String>,
 ) {
-    /** Themed icon for [component], or null if the pack doesn't theme it. */
-    fun iconFor(component: ComponentName, sizePx: Int): ImageBitmap? {
+    /** Themed [Drawable] for [component], or null if the pack doesn't theme it. */
+    fun drawableFor(component: ComponentName): Drawable? {
         val key = "ComponentInfo{${component.packageName}/${component.className}}"
         val drawableName = componentToDrawable[key] ?: return null
         val id = resources.getIdentifier(drawableName, "drawable", packageName)
         if (id == 0) return null
-        val drawable = runCatching { ResourcesCompat.getDrawable(resources, id, null) }.getOrNull()
-            ?: return null
-        return runCatching { drawable.toImageBitmap(sizePx) }.getOrNull()
+        return runCatching { ResourcesCompat.getDrawable(resources, id, null) }.getOrNull()
     }
 }
 

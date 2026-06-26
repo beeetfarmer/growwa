@@ -21,6 +21,7 @@ data class AppInfo(
     val componentName: ComponentName,
     val userHandle: UserHandle,
     val icon: ImageBitmap,
+    val isPrivate: Boolean = false,
 ) {
     val packageName: String get() = key.packageName
 }
