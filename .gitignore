@@ -1,0 +1,54 @@
+# --- Gradle ---
+.gradle/
+build/
+*/build/
+gradle-app.setting
+.gradletasknamecache
+
+# --- Android build output ---
+*.apk
+*.aar
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+captures/
+.externalNativeBuild/
+.cxx/
+*.so
+
+# --- Local config / secrets ---
+local.properties
+keystore.properties
+*.jks
+*.keystore
+secrets.properties
+google-services.json
+
+# --- Android Studio / IntelliJ ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.navigation/
+
+# --- Kotlin ---
+.kotlin/
+
+# --- Logs / temp ---
+*.log
+*.tmp
+*.bak
+*~
+*.swp
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
+
+# --- Project docs not tracked ---
+PLAN.md
