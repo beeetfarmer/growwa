@@ -59,8 +59,10 @@ import androidx.compose.ui.unit.sp
 import com.nl.growwa.core.model.IconPackInfo
 import com.nl.growwa.data.settings.AccentColor
 import com.nl.growwa.data.settings.DrawerSearch
+import com.nl.growwa.data.settings.GestureAction
 import com.nl.growwa.data.settings.LauncherSettings
 import com.nl.growwa.data.settings.ThemeMode
+import com.nl.growwa.feature.gestures.GrowwaAccessibilityService
 import kotlin.math.roundToInt
 
 @Composable
@@ -156,6 +158,18 @@ fun SettingsScreen(
                 label = { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } },
             ) { mode -> onUpdate { it.copy(themeMode = mode) } }
             AccentRow(settings.accent) { accent -> onUpdate { it.copy(accent = accent) } }
+
+            SectionHeader("Gestures")
+            GesturePickerRow("Swipe up", settings.gestureSwipeUp) { a ->
+                onUpdate { it.copy(gestureSwipeUp = a) }
+            }
+            GesturePickerRow("Swipe down", settings.gestureSwipeDown) { a ->
+                onUpdate { it.copy(gestureSwipeDown = a) }
+            }
+            GesturePickerRow("Double tap", settings.gestureDoubleTap) { a ->
+                onUpdate { it.copy(gestureDoubleTap = a) }
+            }
+            AccessibilityRow(settings)
 
             SectionHeader("System")
             Row(
@@ -381,6 +395,87 @@ private fun AccentRow(current: AccentColor, onSelect: (AccentColor) -> Unit) {
                         .clickable { onSelect(accent) },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun GesturePickerRow(
+    title: String,
+    current: GestureAction,
+    onSelect: (GestureAction) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { open = true }
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, modifier = Modifier.weight(1f), fontSize = 16.sp)
+        Text(current.label, color = MaterialTheme.colorScheme.primary)
+    }
+
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+            title = { Text(title) },
+            text = {
+                Column {
+                    GestureAction.entries.forEach { action ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(action); open = false }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(action.label, modifier = Modifier.weight(1f), fontSize = 16.sp)
+                            if (action == current) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun AccessibilityRow(settings: LauncherSettings) {
+    val needsService = listOf(
+        settings.gestureSwipeUp, settings.gestureSwipeDown, settings.gestureDoubleTap,
+    ).any { it == GestureAction.NOTIFICATIONS || it == GestureAction.LOCK_SCREEN }
+    if (!needsService) return
+
+    val context = LocalContext.current
+    val enabled = GrowwaAccessibilityService.isEnabled(context)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable {
+                context.startActivity(
+                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Accessibility service", fontSize = 16.sp)
+            Text(
+                if (enabled) "Enabled" else "Required for shade / lock — tap to enable",
+                color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                fontSize = 13.sp,
+            )
         }
     }
 }

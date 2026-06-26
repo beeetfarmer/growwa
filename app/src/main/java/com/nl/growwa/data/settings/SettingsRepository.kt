@@ -19,6 +19,16 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 /** Placement of the search bar inside the app drawer. */
 enum class DrawerSearch { OFF, TOP, BOTTOM }
 
+/** Action a home-screen gesture can trigger. */
+enum class GestureAction(val label: String) {
+    NONE("Nothing"),
+    APP_DRAWER("App drawer"),
+    FINDER("Finder search"),
+    LAUNCHER_SETTINGS("Launcher settings"),
+    NOTIFICATIONS("Notification shade"),
+    LOCK_SCREEN("Lock screen"),
+}
+
 /** Preset accent colors (ARGB) applied to the Material color scheme. */
 enum class AccentColor(val argb: Long) {
     BLUE(0xFF3B82F6),
@@ -46,6 +56,9 @@ data class LauncherSettings(
     val drawerTransparency: Float = 0f, // 0f = fully opaque, 1f = fully transparent
     val accent: AccentColor = AccentColor.BLUE,
     val iconPack: String = "", // package name of selected icon pack; "" = system default
+    val gestureSwipeUp: GestureAction = GestureAction.APP_DRAWER,
+    val gestureSwipeDown: GestureAction = GestureAction.FINDER,
+    val gestureDoubleTap: GestureAction = GestureAction.LOCK_SCREEN,
 ) {
     companion object {
         const val MAX_DOCK = 7
@@ -77,6 +90,9 @@ class SettingsRepository(private val context: Context) {
         val drawerTransparency = floatPreferencesKey("drawer_transparency")
         val accent = intPreferencesKey("accent")
         val iconPack = stringPreferencesKey("icon_pack")
+        val gestureSwipeUp = intPreferencesKey("gesture_swipe_up")
+        val gestureSwipeDown = intPreferencesKey("gesture_swipe_down")
+        val gestureDoubleTap = intPreferencesKey("gesture_double_tap")
     }
 
     private fun read(p: Preferences): LauncherSettings {
@@ -102,6 +118,12 @@ class SettingsRepository(private val context: Context) {
             drawerTransparency = (p[Keys.drawerTransparency] ?: d.drawerTransparency).coerceIn(0f, 1f),
             accent = AccentColor.entries.getOrElse(p[Keys.accent] ?: 0) { AccentColor.BLUE },
             iconPack = p[Keys.iconPack] ?: d.iconPack,
+            gestureSwipeUp = GestureAction.entries
+                .getOrElse(p[Keys.gestureSwipeUp] ?: d.gestureSwipeUp.ordinal) { d.gestureSwipeUp },
+            gestureSwipeDown = GestureAction.entries
+                .getOrElse(p[Keys.gestureSwipeDown] ?: d.gestureSwipeDown.ordinal) { d.gestureSwipeDown },
+            gestureDoubleTap = GestureAction.entries
+                .getOrElse(p[Keys.gestureDoubleTap] ?: d.gestureDoubleTap.ordinal) { d.gestureDoubleTap },
         )
     }
 
@@ -124,6 +146,9 @@ class SettingsRepository(private val context: Context) {
             p[Keys.drawerTransparency] = next.drawerTransparency
             p[Keys.accent] = next.accent.ordinal
             p[Keys.iconPack] = next.iconPack
+            p[Keys.gestureSwipeUp] = next.gestureSwipeUp.ordinal
+            p[Keys.gestureSwipeDown] = next.gestureSwipeDown.ordinal
+            p[Keys.gestureDoubleTap] = next.gestureDoubleTap.ordinal
         }
     }
 }

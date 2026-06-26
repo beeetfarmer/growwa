@@ -14,15 +14,18 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -31,8 +34,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpOffset
 import android.content.Intent
+import android.provider.Settings
+import com.nl.growwa.data.settings.GestureAction
 import com.nl.growwa.feature.drawer.AppDrawer
 import com.nl.growwa.feature.finder.FinderOverlay
+import com.nl.growwa.feature.gestures.GrowwaAccessibilityService
 import com.nl.growwa.feature.settings.SettingsScreen
 
 /** Overlay states stacked above the home surface. */
@@ -56,12 +62,29 @@ fun LauncherRoot(
         }
     }
     var menuOffset by remember { mutableStateOf(Offset.Zero) }
+    var showA11yPrompt by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val density = LocalDensity.current
 
     val homePager = rememberPagerState(
         pageCount = { ui.layout.pageCount.coerceAtLeast(1) },
     )
+
+    // Read latest via rememberUpdatedState so the long-lived pointerInput closures, which
+    // capture state once, always see current settings and dispatch logic.
+    val currentSettings by rememberUpdatedState(ui.settings)
+    val performGesture by rememberUpdatedState<(GestureAction) -> Unit> { action ->
+        when (action) {
+            GestureAction.NONE -> {}
+            GestureAction.APP_DRAWER -> overlay = Overlay.DRAWER
+            GestureAction.FINDER -> overlay = Overlay.FINDER
+            GestureAction.LAUNCHER_SETTINGS -> overlay = Overlay.SETTINGS
+            GestureAction.NOTIFICATIONS ->
+                if (!GrowwaAccessibilityService.expandNotifications()) showA11yPrompt = true
+            GestureAction.LOCK_SCREEN ->
+                if (!GrowwaAccessibilityService.lockScreen()) showA11yPrompt = true
+        }
+    }
 
     BackHandler(enabled = overlay != Overlay.NONE) { overlay = Overlay.NONE }
 
@@ -76,18 +99,21 @@ fun LauncherRoot(
                         onDragStart = { total = 0f },
                         onDragEnd = {
                             when {
-                                total < -SWIPE_THRESHOLD -> overlay = Overlay.DRAWER
-                                total > SWIPE_THRESHOLD -> overlay = Overlay.FINDER
+                                total < -SWIPE_THRESHOLD -> performGesture(currentSettings.gestureSwipeUp)
+                                total > SWIPE_THRESHOLD -> performGesture(currentSettings.gestureSwipeDown)
                             }
                         },
                         onVerticalDrag = { _, dy -> total += dy },
                     )
                 }
                 .pointerInput(Unit) {
-                    detectTapGestures(onLongPress = { offset ->
-                        menuOffset = offset
-                        homeMenu = true
-                    })
+                    detectTapGestures(
+                        onLongPress = { offset ->
+                            menuOffset = offset
+                            homeMenu = true
+                        },
+                        onDoubleTap = { performGesture(currentSettings.gestureDoubleTap) },
+                    )
                 },
         ) {
             HomeScreen(
@@ -184,6 +210,34 @@ fun LauncherRoot(
                 onUpdate = viewModel::updateSettings,
                 loadIconPacks = viewModel::loadIconPacks,
                 onClose = { overlay = Overlay.NONE },
+            )
+        }
+
+        // Prompt to enable the accessibility service when a gesture needs it but it's off.
+        if (showA11yPrompt) {
+            AlertDialog(
+                onDismissRequest = { showA11yPrompt = false },
+                title = { Text("Enable accessibility service") },
+                text = {
+                    Text(
+                        "This gesture needs Growwa's accessibility service to open the " +
+                            "notification shade or lock the screen. Enable it in system settings.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showA11yPrompt = false
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    }) { Text("Open settings") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showA11yPrompt = false }) { Text("Not now") }
+                },
             )
         }
     }

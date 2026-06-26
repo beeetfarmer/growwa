@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Growwa</string>
+    <string name="accessibility_service_description">Lets Growwa open the notification shade and lock the screen from home-screen gestures. Growwa does not read screen content.</string>
 </resources>
