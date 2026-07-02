@@ -1,5 +1,12 @@
 package com.nl.growwa.feature.home
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector2D
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -45,21 +52,28 @@ import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
@@ -68,6 +82,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
@@ -150,6 +165,9 @@ fun HomeScreen(
     var hoverSlot by remember { mutableStateOf<DropSlot?>(null) }
     // When the pointer dwells over another app, we switch from "swap" to "make folder".
     var folderTarget by remember { mutableStateOf<DropSlot?>(null) }
+    // Slot whose item we keep hidden after a drop, until the layout update lands — avoids the
+    // dropped icon flashing back at its old position before the move/remove propagates.
+    var pendingFrom by remember { mutableStateOf<DropSlot?>(null) }
 
     // Converts a pointer (local to a cell) into the drag layer's coordinate space.
     val toRoot: (LayoutCoordinates, Offset) -> Offset = { coords, local ->
@@ -203,12 +221,16 @@ fun HomeScreen(
                 }
                 // Released over the Remove bar → delete the dragged item.
                 if (overRm || (removeBounds.value.width > 0 && removeBounds.value.contains(d.pointer))) {
+                    pendingFrom = d.from
                     latestOnRemove(d.from)
                     return
                 }
                 val target = hv
                     ?: computeTarget(d.pointer, latestSettings, gridBounds.value, dockBounds.value, latestPage, latestDockCount)
-                if (target != null) latestOnDrop(d.from, target, makeFolder)
+                if (target != null) {
+                    pendingFrom = d.from
+                    latestOnDrop(d.from, target, makeFolder)
+                }
             }
             fun cancel() { drag = null; hoverSlot = null; folderTarget = null; overRemove = false }
 
@@ -256,6 +278,16 @@ fun HomeScreen(
         }
     }
 
+    // Reveal a just-dropped item once the new layout arrives (or after a short safety timeout,
+    // in case the drop was a no-op that produced no layout change).
+    LaunchedEffect(layout) { pendingFrom = null }
+    LaunchedEffect(pendingFrom) {
+        if (pendingFrom != null) {
+            delay(500)
+            pendingFrom = null
+        }
+    }
+
     // Dwell timer: hovering over another app for a moment arms folder creation.
     LaunchedEffect(hoverSlot, drag) {
         folderTarget = null
@@ -298,6 +330,7 @@ fun HomeScreen(
                     dragging = drag != null,
                     hoverSlot = hoverSlot,
                     drag = drag,
+                    pendingSlot = pendingFrom,
                     menuSlot = menuSlot,
                     onTap = { item ->
                         when (item) {
@@ -329,6 +362,7 @@ fun HomeScreen(
                 dragging = drag != null,
                 hoverSlot = hoverSlot,
                 drag = drag,
+                pendingSlot = pendingFrom,
                 menuSlot = menuSlot,
                 boundsCapture = { coords ->
                     dockBounds.value = rootCoords.value?.localBoundingBoxOf(coords) ?: coords.boundsInRoot()
@@ -423,6 +457,7 @@ private fun HomePage(
     dragging: Boolean,
     hoverSlot: DropSlot?,
     drag: DragSession?,
+    pendingSlot: DropSlot?,
     menuSlot: DropSlot?,
     onTap: (HomeItem) -> Unit,
     onDragStart: (DragSession) -> Unit,
@@ -512,7 +547,7 @@ private fun HomePage(
                                     slot = slot,
                                     settings = settings,
                                     showLabel = settings.showHomeLabels,
-                                    isDragSource = drag?.from == slot,
+                                    isDragSource = drag?.from == slot || pendingSlot == slot,
                                     menuExpanded = menuSlot == slot,
                                     toRoot = toRoot,
                                     onTap = onTap,
@@ -637,8 +672,8 @@ private fun HomePage(
                 draft = d,
                 cols = cols, rows = rows,
                 cellW = cellW, cellH = cellH, padX = padX, padY = padY,
-                minCellsX = info?.let { widgetCellsFor(it.minResizeWidth) } ?: 1,
-                minCellsY = info?.let { widgetCellsFor(it.minResizeHeight) } ?: 1,
+                minCellsX = info?.let { widgetCellsFor(it.minResizeWidth, density.density) } ?: 1,
+                minCellsY = info?.let { widgetCellsFor(it.minResizeHeight, density.density) } ?: 1,
                 canHorizontal = mode and AppWidgetProviderInfo.RESIZE_HORIZONTAL != 0,
                 canVertical = mode and AppWidgetProviderInfo.RESIZE_VERTICAL != 0,
                 blocked = blocked,
@@ -815,7 +850,11 @@ private fun BoxScope.EdgeHandle(
 }
 
 /** Convert a widget's min dp dimension to a whole number of grid cells. */
-private fun widgetCellsFor(minDp: Int) = ((minDp + 30) / 70).coerceAtLeast(1)
+/** Convert a widget's minimum pixel dimension into a whole number of ~70dp grid cells. */
+private fun widgetCellsFor(minPx: Int, density: Float): Int {
+    val dp = minPx / density
+    return ((dp + 30f) / 70f).roundToInt().coerceAtLeast(1)
+}
 
 private fun cellsClear(
     col: Int, row: Int, spanX: Int, spanY: Int, blocked: Set<Int>, cols: Int,
@@ -867,6 +906,7 @@ private fun Dock(
     dragging: Boolean,
     hoverSlot: DropSlot?,
     drag: DragSession?,
+    pendingSlot: DropSlot?,
     menuSlot: DropSlot?,
     boundsCapture: (LayoutCoordinates) -> Unit,
     toRoot: (LayoutCoordinates, Offset) -> Offset,
@@ -883,17 +923,24 @@ private fun Dock(
     val count = items.size
 
     // Auto-size: ≤4 apps stay big (classic iOS dock); 5–6 shrink to stay compact.
-    val iconSize = when {
-        count <= 4 -> 62.dp
-        count == 5 -> 54.dp
-        else -> 48.dp
-    }
-    val gap = when {
-        count <= 4 -> 20.dp
-        count == 5 -> 14.dp
-        else -> 10.dp
-    }
-    val vPad = if (count <= 4) 16.dp else 12.dp
+    // Animated so adding/removing an app grows/shrinks the tray smoothly.
+    val iconSize by animateDpAsState(
+        when {
+            count <= 4 -> 62.dp
+            count == 5 -> 54.dp
+            else -> 48.dp
+        },
+        label = "dockIcon",
+    )
+    val gap by animateDpAsState(
+        when {
+            count <= 4 -> 20.dp
+            count == 5 -> 14.dp
+            else -> 10.dp
+        },
+        label = "dockGap",
+    )
+    val vPad by animateDpAsState(if (count <= 4) 16.dp else 12.dp, label = "dockPad")
 
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         if (count == 0) {
@@ -919,39 +966,87 @@ private fun Dock(
         ) {
             items.forEach { (pos, item) ->
                 val slot = DropSlot("dock", 0, pos)
-                Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
-                    ItemCell(
-                        item = item,
-                        slot = slot,
-                        settings = settings,
-                        showLabel = false,
-                        iconSizeDp = iconSize.value,
-                        isDragSource = drag?.from == slot,
-                        menuExpanded = menuSlot == slot,
-                        toRoot = toRoot,
-                        onTap = onTap,
-                        onDragStart = onDragStart,
-                        onDragMove = onDragMove,
-                        onDragEnd = onDragEnd,
-                        onDragCancel = onDragCancel,
-                        onMenuDismiss = onMenuDismiss,
-                        menuItems = {
-                            HomeItemMenu(
-                                item = item,
-                                inDock = true,
-                                onAddToDock = {},
-                                onAppInfo = onAppInfo,
-                                onRemove = { onRemove(pos) },
-                                onRename = {},
-                                onDeleteFolder = {},
-                                onDismiss = onMenuDismiss,
-                            )
-                        },
+                // Key by app/folder identity so a reorder moves the same instance — the
+                // placement animation then slides it to its new spot instead of snapping.
+                key(keyOf(item)) {
+                    // Scale + fade in when this app first lands in the dock.
+                    var shown by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { shown = true }
+                    val enter by animateFloatAsState(
+                        if (shown) 1f else 0f,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        label = "dockEnter",
                     )
+                    Box(
+                        Modifier
+                            .animatePlacement()
+                            .graphicsLayer {
+                                scaleX = 0.5f + 0.5f * enter
+                                scaleY = 0.5f + 0.5f * enter
+                                alpha = enter
+                            }
+                            .size(iconSize),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ItemCell(
+                            item = item,
+                            slot = slot,
+                            settings = settings,
+                            showLabel = false,
+                            iconSizeDp = iconSize.value,
+                            isDragSource = drag?.from == slot || pendingSlot == slot,
+                            menuExpanded = menuSlot == slot,
+                            toRoot = toRoot,
+                            onTap = onTap,
+                            onDragStart = onDragStart,
+                            onDragMove = onDragMove,
+                            onDragEnd = onDragEnd,
+                            onDragCancel = onDragCancel,
+                            onMenuDismiss = onMenuDismiss,
+                            menuItems = {
+                                HomeItemMenu(
+                                    item = item,
+                                    inDock = true,
+                                    onAddToDock = {},
+                                    onAppInfo = onAppInfo,
+                                    onRemove = { onRemove(pos) },
+                                    onRename = {},
+                                    onDeleteFolder = {},
+                                    onDismiss = onMenuDismiss,
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+/** Stable identity for a home/dock item, used as a Compose key so reorders animate. */
+private fun keyOf(item: HomeItem): String = when (item) {
+    is AppItem -> "app_${item.app.key}"
+    is FolderItem -> "folder_${item.id}"
+}
+
+/**
+ * Animates a child whenever its placement within the parent changes (e.g. a reorder), sliding it
+ * from its old position to the new one. Works in any layout, unlike LazyList item animations.
+ */
+private fun Modifier.animatePlacement(): Modifier = composed {
+    val scope = rememberCoroutineScope()
+    var target by remember { mutableStateOf(IntOffset.Zero) }
+    var animatable by remember { mutableStateOf<Animatable<IntOffset, AnimationVector2D>?>(null) }
+    this
+        .onPlaced { coords -> target = coords.positionInParent().round() }
+        .offset {
+            val anim = animatable
+                ?: Animatable(target, IntOffset.VectorConverter).also { animatable = it }
+            if (anim.targetValue != target) {
+                scope.launch { anim.animateTo(target, spring(stiffness = Spring.StiffnessMediumLow)) }
+            }
+            anim.value - target
+        }
 }
 
 @Composable

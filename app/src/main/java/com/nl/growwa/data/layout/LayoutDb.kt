@@ -10,6 +10,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
@@ -58,11 +59,35 @@ interface PlacementDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(placement: PlacementEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(placements: List<PlacementEntity>)
+
     @Query("DELETE FROM placements WHERE container = :container AND page = :page AND position = :position")
     suspend fun removeSlot(container: String, page: Int, position: Int)
 
     @Query("DELETE FROM placements WHERE container = :container")
     suspend fun clearContainer(container: String)
+
+    /** Atomically replace a container's contents, so observers see a single update (no flicker). */
+    @Transaction
+    suspend fun replaceContainer(container: String, items: List<PlacementEntity>) {
+        clearContainer(container)
+        upsertAll(items)
+    }
+
+    /** Atomically move a slot out of one container and replace [container]'s contents. */
+    @Transaction
+    suspend fun moveSlotIntoContainer(
+        fromContainer: String,
+        fromPage: Int,
+        fromPosition: Int,
+        container: String,
+        items: List<PlacementEntity>,
+    ) {
+        removeSlot(fromContainer, fromPage, fromPosition)
+        clearContainer(container)
+        upsertAll(items)
+    }
 
     @Query("DELETE FROM placements WHERE kind = 'app' AND packageName = :packageName AND className = :className AND userSerial = :userSerial")
     suspend fun removeApp(packageName: String, className: String, userSerial: Long)

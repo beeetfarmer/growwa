@@ -14,6 +14,7 @@ import com.nl.growwa.core.model.IconPackInfo
 import com.nl.growwa.core.model.SettingAction
 import com.nl.growwa.core.model.WidgetPlacement
 import android.appwidget.AppWidgetProviderInfo
+import android.os.Build
 import com.nl.growwa.data.widgets.GrowwaWidgetHost
 import com.nl.growwa.data.apps.AppRepository
 import com.nl.growwa.data.contacts.ContactsRepository
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** Resolved home/dock layout ready for rendering. */
 data class ResolvedLayout(
@@ -299,9 +301,17 @@ class LauncherViewModel(
     // --- Widgets ---
     fun addWidget(provider: AppWidgetProviderInfo, appWidgetId: Int, page: Int) = viewModelScope.launch {
         val s = uiState.value.settings
-        fun cells(minDp: Int) = ((minDp + 30) / 70).coerceAtLeast(1)
-        val spanX = cells(provider.minWidth).coerceIn(1, s.homeColumns)
-        val spanY = cells(provider.minHeight).coerceIn(1, s.homeRows)
+        // provider.minWidth/minHeight are in PIXELS; convert to dp before mapping to ~70dp cells.
+        val density = widgetHost.density
+        fun cellsFromPx(px: Int): Int {
+            val dp = px / density
+            return (((dp + 30f) / 70f).roundToInt()).coerceAtLeast(1)
+        }
+        // Prefer the widget's declared target cell size (API 31+) when it provides one.
+        val targetX = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) provider.targetCellWidth else 0
+        val targetY = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) provider.targetCellHeight else 0
+        val spanX = (if (targetX > 0) targetX else cellsFromPx(provider.minWidth)).coerceIn(1, s.homeColumns)
+        val spanY = (if (targetY > 0) targetY else cellsFromPx(provider.minHeight)).coerceIn(1, s.homeRows)
         val slot = layoutRepository.findWidgetSlot(page, s.homeColumns, s.homeRows, spanX, spanY)
         if (slot == null) {
             widgetHost.deleteId(appWidgetId) // no room; release the id

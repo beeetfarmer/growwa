@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fixed height of the world-clock capsule; it centres vertically within its grid cell so
+         it stays a slim strip regardless of how tall the cell is. Kept in sync with the bitmap
+         drawn in WorldClock.kt via R.dimen. -->
+    <dimen name="world_clock_pill_height">96dp</dimen>
+</resources>

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Slim capsule, fixed height and vertically centred so it never fills a tall grid cell. -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/world_clock_pill_height"
+        android:layout_gravity="center_vertical"
+        android:layout_marginHorizontal="6dp">
+
+        <!-- Capsule background: one colour-per-city segment, drawn as a bitmap at runtime. -->
+        <ImageView
+            android:id="@+id/wc_background"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitXY"
+            android:contentDescription="@null" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/wc_cell0"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingHorizontal="6dp">
+
+                <TextView
+                    android:id="@+id/wc_city0"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="#FFFFFF" />
+
+                <TextClock
+                    android:id="@+id/wc_time0"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:format12Hour="HH:mm"
+                    android:format24Hour="HH:mm"
+                    android:textSize="26sp"
+                    android:letterSpacing="0.02"
+                    android:textColor="#FFFFFF" />
+
+                <TextClock
+                    android:id="@+id/wc_date0"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:format12Hour="EEE d MMM"
+                    android:format24Hour="EEE d MMM"
+                    android:textSize="11sp"
+                    android:textColor="#FFFFFF" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/wc_cell1"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingHorizontal="6dp">
+
+                <TextView
+                    android:id="@+id/wc_city1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="#FFFFFF" />
+
+                <TextClock
+                    android:id="@+id/wc_time1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:format12Hour="HH:mm"
+                    android:format24Hour="HH:mm"
+                    android:textSize="26sp"
+                    android:letterSpacing="0.02"
+                    android:textColor="#FFFFFF" />
+
+                <TextClock
+                    android:id="@+id/wc_date1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:format12Hour="EEE d MMM"
+                    android:format24Hour="EEE d MMM"
+                    android:textSize="11sp"
+                    android:textColor="#FFFFFF" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/wc_cell2"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingHorizontal="6dp">
+
+                <TextView
+                    android:id="@+id/wc_city2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="#FFFFFF" />
+
+                <TextClock
+                    android:id="@+id/wc_time2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:format12Hour="HH:mm"
+                    android:format24Hour="HH:mm"
+                    android:textSize="26sp"
+                    android:letterSpacing="0.02"
+                    android:textColor="#FFFFFF" />
+
+                <TextClock
+                    android:id="@+id/wc_date2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:format12Hour="EEE d MMM"
+                    android:format24Hour="EEE d MMM"
+                    android:textSize="11sp"
+                    android:textColor="#FFFFFF" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

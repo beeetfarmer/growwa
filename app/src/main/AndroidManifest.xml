@@ -62,6 +62,29 @@
             </intent-filter>
         </activity>
 
+        <!-- Phase 7: built-in world-clock widget + its configuration screen. -->
+        <receiver
+            android:name=".feature.widgets.WorldClockWidgetProvider"
+            android:exported="true"
+            android:label="@string/world_clock_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/world_clock_widget_info" />
+        </receiver>
+
+        <activity
+            android:name=".feature.widgets.WorldClockConfigActivity"
+            android:exported="true"
+            android:label="@string/world_clock_label"
+            android:theme="@style/Theme.Growwa">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <!-- Phase 5: performs global actions (shade / lock) for home gestures. -->
         <service
             android:name=".feature.gestures.GrowwaAccessibilityService"

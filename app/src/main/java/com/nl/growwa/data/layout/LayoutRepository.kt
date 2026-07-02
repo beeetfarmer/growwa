@@ -82,8 +82,10 @@ class LayoutRepository(
             kind = "app",
         )
         items.add(index.coerceIn(0, items.size), entity)
-        dao.clearContainer("dock")
-        items.forEachIndexed { j, p -> dao.upsert(p.copy(container = "dock", page = 0, position = j)) }
+        dao.replaceContainer(
+            "dock",
+            items.mapIndexed { j, p -> p.copy(container = "dock", page = 0, position = j) },
+        )
         return true
     }
 
@@ -116,8 +118,7 @@ class LayoutRepository(
         // toIndex is an insertion point in the original list; account for the removed item.
         val idx = (if (i < toIndex) toIndex - 1 else toIndex).coerceIn(0, items.size)
         items.add(idx, moving)
-        dao.clearContainer("dock")
-        items.forEachIndexed { j, p -> dao.upsert(p.copy(page = 0, position = j)) }
+        dao.replaceContainer("dock", items.mapIndexed { j, p -> p.copy(page = 0, position = j) })
     }
 
     /** Move an item from another container into the dock at [toIndex]; false if the dock is full. */
@@ -127,11 +128,13 @@ class LayoutRepository(
         val src = dao.getSlot(fromContainer, fromPage, fromPos) ?: return false
         val items = dao.itemsIn("dock").sortedBy { it.position }.toMutableList()
         if (items.size >= max) return false
-        dao.removeSlot(fromContainer, fromPage, fromPos)
         val idx = toIndex.coerceIn(0, items.size)
         items.add(idx, src)
-        dao.clearContainer("dock")
-        items.forEachIndexed { j, p -> dao.upsert(p.copy(container = "dock", page = 0, position = j)) }
+        dao.moveSlotIntoContainer(
+            fromContainer, fromPage, fromPos,
+            "dock",
+            items.mapIndexed { j, p -> p.copy(container = "dock", page = 0, position = j) },
+        )
         return true
     }
 

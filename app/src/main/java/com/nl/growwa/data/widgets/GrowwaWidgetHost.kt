@@ -16,6 +16,9 @@ class GrowwaWidgetHost(context: Context) {
     val manager: AppWidgetManager = AppWidgetManager.getInstance(appContext)
     val host: AppWidgetHost = AppWidgetHost(appContext, WIDGET_HOST_ID)
 
+    /** Screen density, used to convert a provider's pixel min-sizes into grid cells. */
+    val density: Float = appContext.resources.displayMetrics.density
+
     fun startListening() { runCatching { host.startListening() } }
     fun stopListening() { runCatching { host.stopListening() } }
 
