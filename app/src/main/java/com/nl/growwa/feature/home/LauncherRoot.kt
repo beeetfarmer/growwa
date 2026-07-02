@@ -237,6 +237,7 @@ fun LauncherRoot(
                 searchContacts = viewModel::searchContacts,
                 onLaunchApp = viewModel::launch,
                 onDismiss = { overlay = Overlay.NONE },
+                backgroundTransparency = ui.settings.finderTransparency,
             )
         }
 

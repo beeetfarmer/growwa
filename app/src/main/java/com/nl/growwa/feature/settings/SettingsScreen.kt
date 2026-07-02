@@ -176,6 +176,15 @@ fun SettingsScreen(
                 ) { v -> onUpdate { it.copy(drawerTransparency = v) } }
             }
 
+            SettingsGroup("Finder") {
+                SliderRow(
+                    Icons.Default.Opacity,
+                    "Background transparency",
+                    "${(settings.finderTransparency * 100).roundToInt()}%",
+                    settings.finderTransparency, 0f..1f,
+                ) { v -> onUpdate { it.copy(finderTransparency = v) } }
+            }
+
             SettingsGroup("Appearance") {
                 ChipRow(
                     icon = Icons.Default.DarkMode,

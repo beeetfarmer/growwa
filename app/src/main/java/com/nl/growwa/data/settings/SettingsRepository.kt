@@ -57,6 +57,7 @@ data class LauncherSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val drawerSearch: DrawerSearch = DrawerSearch.TOP,
     val drawerTransparency: Float = 0f, // 0f = fully opaque, 1f = fully transparent
+    val finderTransparency: Float = 0f, // 0f = fully opaque, 1f = fully transparent
     val accent: AccentColor = AccentColor.BLUE,
     val iconPack: String = "", // package name of selected icon pack; "" = system default
     val gestureSwipeUp: GestureAction = GestureAction.APP_DRAWER,
@@ -93,6 +94,7 @@ class SettingsRepository(private val context: Context) {
         val themeMode = intPreferencesKey("theme_mode")
         val drawerSearch = intPreferencesKey("drawer_search")
         val drawerTransparency = floatPreferencesKey("drawer_transparency")
+        val finderTransparency = floatPreferencesKey("finder_transparency")
         val accent = intPreferencesKey("accent")
         val iconPack = stringPreferencesKey("icon_pack")
         val gestureSwipeUp = intPreferencesKey("gesture_swipe_up")
@@ -123,6 +125,7 @@ class SettingsRepository(private val context: Context) {
             themeMode = ThemeMode.entries.getOrElse(p[Keys.themeMode] ?: 0) { ThemeMode.SYSTEM },
             drawerSearch = DrawerSearch.entries.getOrElse(p[Keys.drawerSearch] ?: 1) { DrawerSearch.TOP },
             drawerTransparency = (p[Keys.drawerTransparency] ?: d.drawerTransparency).coerceIn(0f, 1f),
+            finderTransparency = (p[Keys.finderTransparency] ?: d.finderTransparency).coerceIn(0f, 1f),
             accent = AccentColor.entries.getOrElse(p[Keys.accent] ?: 0) { AccentColor.BLUE },
             iconPack = p[Keys.iconPack] ?: d.iconPack,
             gestureSwipeUp = GestureAction.entries
@@ -154,6 +157,7 @@ class SettingsRepository(private val context: Context) {
             p[Keys.themeMode] = next.themeMode.ordinal
             p[Keys.drawerSearch] = next.drawerSearch.ordinal
             p[Keys.drawerTransparency] = next.drawerTransparency
+            p[Keys.finderTransparency] = next.finderTransparency
             p[Keys.accent] = next.accent.ordinal
             p[Keys.iconPack] = next.iconPack
             p[Keys.gestureSwipeUp] = next.gestureSwipeUp.ordinal

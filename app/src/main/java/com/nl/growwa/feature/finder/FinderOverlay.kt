@@ -69,6 +69,7 @@ fun FinderOverlay(
     searchContacts: suspend (String) -> List<ContactInfo>,
     onLaunchApp: (AppInfo) -> Unit,
     onDismiss: () -> Unit,
+    backgroundTransparency: Float = 0f,
 ) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
@@ -113,7 +114,7 @@ fun FinderOverlay(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 1f - backgroundTransparency))
             .windowInsetsPadding(WindowInsets.systemBars)
             .imePadding()
             .padding(16.dp),
