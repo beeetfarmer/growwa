@@ -1,6 +1,11 @@
 package com.nl.growwa.feature.drawer
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,7 +43,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.withTimeout
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nl.growwa.core.model.AppInfo
@@ -66,6 +77,9 @@ fun AppDrawer(
     onAppInfo: (AppInfo) -> Unit,
     onLockPrivate: () -> Unit,
     onUnlockPrivate: () -> Unit,
+    onDragStart: (AppInfo, Offset) -> Unit,
+    onDragMove: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
@@ -143,6 +157,9 @@ fun AppDrawer(
                     onAddToHome = onAddToHome,
                     onAddToDock = onAddToDock,
                     onAppInfo = onAppInfo,
+                    onDragStart = onDragStart,
+                    onDragMove = onDragMove,
+                    onDragEnd = onDragEnd,
                 )
             }
         }
@@ -162,6 +179,9 @@ private fun AppGrid(
     onAddToHome: (AppInfo) -> Unit,
     onAddToDock: (AppInfo) -> Unit,
     onAppInfo: (AppInfo) -> Unit,
+    onDragStart: (AppInfo, Offset) -> Unit,
+    onDragMove: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
@@ -175,7 +195,10 @@ private fun AppGrid(
             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { header() }
         }
         items(apps, key = { it.key.toString() }) { app ->
-            DrawerCell(app, settings, onLaunch, onAddToHome, onAddToDock, onAppInfo)
+            DrawerCell(
+                app, settings, onLaunch, onAddToHome, onAddToDock, onAppInfo,
+                onDragStart, onDragMove, onDragEnd,
+            )
         }
     }
 }
@@ -236,17 +259,59 @@ private fun DrawerCell(
     onAddToHome: (AppInfo) -> Unit,
     onAddToDock: (AppInfo) -> Unit,
     onAppInfo: (AppInfo) -> Unit,
+    onDragStart: (AppInfo, Offset) -> Unit,
+    onDragMove: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth()) {
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coords = it }
+            .pointerInput(app.key) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var longPressed = false
+                    // Quick tap → launch; hold past the long-press timeout → context menu.
+                    val up = try {
+                        withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                            waitForUpOrCancellation()
+                        }
+                    } catch (_: PointerEventTimeoutCancellationException) {
+                        longPressed = true
+                        null
+                    }
+                    when {
+                        longPressed -> {
+                            // Held ~0.5s: reveal the context menu.
+                            menuOpen = true
+                            // If the finger then drags, pick the app up to place on home/dock.
+                            val slop = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                            if (slop != null) {
+                                menuOpen = false
+                                coords?.let { onDragStart(app, it.localToWindow(slop.position)) }
+                                drag(down.id) { change ->
+                                    coords?.let { onDragMove(it.localToWindow(change.position)) }
+                                    change.consume()
+                                }
+                                onDragEnd()
+                            }
+                        }
+                        up != null -> onLaunch(app)
+                    }
+                }
+            },
+    ) {
+        // Pure visual — gestures are handled by the wrapping Box above.
         AppIconCell(
             icon = app.icon,
             label = app.label,
             iconSize = settings.iconSizeDp.dp,
             labelSize = settings.labelSizeSp.sp,
             showLabel = settings.showDrawerLabels,
-            onClick = { onLaunch(app) },
-            onLongClick = { menuOpen = true },
+            onClick = null,
+            onLongClick = null,
             modifier = Modifier.fillMaxWidth(),
             labelColor = MaterialTheme.colorScheme.onSurface,
         )

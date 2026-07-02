@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -28,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -40,9 +43,10 @@ import com.nl.growwa.feature.drawer.AppDrawer
 import com.nl.growwa.feature.finder.FinderOverlay
 import com.nl.growwa.feature.gestures.GrowwaAccessibilityService
 import com.nl.growwa.feature.settings.SettingsScreen
+import com.nl.growwa.feature.widgets.WidgetPicker
 
 /** Overlay states stacked above the home surface. */
-private enum class Overlay { NONE, DRAWER, FINDER, SETTINGS }
+private enum class Overlay { NONE, DRAWER, FINDER, SETTINGS, WIDGETS }
 
 @Composable
 fun LauncherRoot(
@@ -53,6 +57,8 @@ fun LauncherRoot(
     val ui by viewModel.uiState.collectAsState()
     var overlay by remember { mutableStateOf(Overlay.NONE) }
     var homeMenu by remember { mutableStateOf(false) }
+    // Live state for an app being dragged out of the drawer onto home/dock.
+    val drawerDrag = remember { DrawerDragState() }
 
     // Collapse overlays back to home whenever the launcher is re-entered.
     androidx.compose.runtime.LaunchedEffect(resetSignal) {
@@ -125,6 +131,20 @@ fun LauncherRoot(
                 onAppInfo = viewModel::openAppInfo,
                 onRemoveFromHome = viewModel::removeFromHome,
                 onRemoveFromDock = viewModel::removeFromDock,
+                onDrop = viewModel::onDrop,
+                onRenameFolder = viewModel::renameFolder,
+                onTakeOutOfFolder = viewModel::takeOutOfFolder,
+                onDeleteFolder = viewModel::deleteFolder,
+                widgetHost = viewModel.widgetHost,
+                onRemoveWidget = viewModel::removeWidget,
+                onResizeWidget = viewModel::resizeWidget,
+                drawerDrag = drawerDrag,
+                onExternalDrop = { app, slot -> viewModel.dropFromDrawer(app, slot) },
+                onExternalDragEnd = {
+                    drawerDrag.app = null
+                    drawerDrag.release = 0
+                    overlay = Overlay.NONE
+                },
             )
 
             // Long-press-on-home popup.
@@ -133,6 +153,16 @@ fun LauncherRoot(
                 onDismissRequest = { homeMenu = false },
                 offset = with(density) { DpOffset(menuOffset.x.toDp(), menuOffset.y.toDp()) },
             ) {
+                DropdownMenuItem(
+                    text = { Text("Create folder") },
+                    leadingIcon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null) },
+                    onClick = { homeMenu = false; viewModel.createFolder(homePager.currentPage) },
+                )
+                DropdownMenuItem(
+                    text = { Text("Widgets") },
+                    leadingIcon = { Icon(Icons.Default.Widgets, contentDescription = null) },
+                    onClick = { homeMenu = false; overlay = Overlay.WIDGETS },
+                )
                 DropdownMenuItem(
                     text = { Text("Launcher settings") },
                     leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
@@ -163,6 +193,10 @@ fun LauncherRoot(
             Box(
                 Modifier
                     .fillMaxSize()
+                    // Visible only for a normal open. While an app is being dragged out (app != null)
+                    // or the drawer is sliding away after a drop (overlay != DRAWER) it stays
+                    // transparent — but composed, so the long-press drag keeps receiving events.
+                    .alpha(if (overlay == Overlay.DRAWER && drawerDrag.app == null) 1f else 0f)
                     .pointerInput(Unit) {
                         var total = 0f
                         detectVerticalDragGestures(
@@ -183,6 +217,9 @@ fun LauncherRoot(
                     onAppInfo = viewModel::openAppInfo,
                     onLockPrivate = viewModel::lockPrivateSpace,
                     onUnlockPrivate = viewModel::unlockPrivateSpace,
+                    onDragStart = { app, p -> drawerDrag.app = app; drawerDrag.pointer = p },
+                    onDragMove = { drawerDrag.pointer = it },
+                    onDragEnd = { drawerDrag.release++ },
                 )
             }
         }
@@ -215,6 +252,15 @@ fun LauncherRoot(
                 loadIconPacks = viewModel::loadIconPacks,
                 privateSpaceAvailable = ui.privateSpace.available,
                 onClose = { overlay = Overlay.NONE },
+            )
+        }
+
+        // Widget picker (modal dialog).
+        if (overlay == Overlay.WIDGETS) {
+            WidgetPicker(
+                widgetHost = viewModel.widgetHost,
+                onPlace = { provider, id -> viewModel.addWidget(provider, id, homePager.currentPage) },
+                onDismiss = { overlay = Overlay.NONE },
             )
         }
 

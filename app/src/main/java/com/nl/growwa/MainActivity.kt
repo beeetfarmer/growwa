@@ -25,10 +25,21 @@ class MainActivity : ComponentActivity() {
     // Bumped whenever the launcher is (re)entered, so the UI can reset to the home screen.
     private var homeReset by mutableIntStateOf(0)
 
+    private val container by lazy { (application as GrowwaApp).container }
+
+    override fun onStart() {
+        super.onStart()
+        container.widgetHost.startListening()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        container.widgetHost.stopListening()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val container = (application as GrowwaApp).container
         setContent {
             val settings by container.settingsRepository.settings
                 .collectAsState(initial = LauncherSettings())

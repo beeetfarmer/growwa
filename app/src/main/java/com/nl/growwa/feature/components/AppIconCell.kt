@@ -25,7 +25,11 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.draw.shadow
 
-/** One app tile: icon + optional single-line label. Tap launches, long-press opens menu. */
+/**
+ * One app tile: icon + optional single-line label. When [onClick]/[onLongClick] are provided the
+ * cell handles its own clicks; pass both as null to render a pure visual whose gestures the caller
+ * supplies (e.g. drawer drag-to-home).
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppIconCell(
@@ -34,15 +38,21 @@ fun AppIconCell(
     iconSize: Dp,
     labelSize: TextUnit,
     showLabel: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     labelColor: Color = Color.White,
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .then(
+                if (onClick != null || onLongClick != null) {
+                    Modifier.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick)
+                } else {
+                    Modifier
+                },
+            )
             .padding(vertical = 6.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top,
