@@ -1,7 +1,12 @@
 package com.nl.growwa.feature.settings
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +39,8 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
@@ -75,6 +82,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nl.growwa.core.model.IconPackInfo
@@ -85,6 +93,9 @@ import com.nl.growwa.data.settings.LauncherSettings
 import com.nl.growwa.data.settings.PrivateSpacePosition
 import com.nl.growwa.data.settings.ThemeMode
 import com.nl.growwa.feature.gestures.GrowwaAccessibilityService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import kotlin.math.roundToInt
 
 @Composable
@@ -183,6 +194,16 @@ fun SettingsScreen(
                     "${(settings.finderTransparency * 100).roundToInt()}%",
                     settings.finderTransparency, 0f..1f,
                 ) { v -> onUpdate { it.copy(finderTransparency = v) } }
+            }
+
+            SettingsGroup("File search") {
+                FileAccessRow()
+                Divider()
+                ExcludedFoldersSection(
+                    excluded = settings.excludedSearchFolders,
+                    onAdd = { path -> onUpdate { it.copy(excludedSearchFolders = it.excludedSearchFolders + path) } },
+                    onRemove = { path -> onUpdate { it.copy(excludedSearchFolders = it.excludedSearchFolders - path) } },
+                )
             }
 
             SettingsGroup("Appearance") {
@@ -518,6 +539,174 @@ private fun AccessibilityRow(settings: LauncherSettings) {
             )
         }
     }
+}
+
+/** All-files-access status; tapping opens the system grant screen (or requests read on API < 30). */
+@Composable
+private fun FileAccessRow() {
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(hasAllFilesAccess(context)) }
+    val settingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { granted = hasAllFilesAccess(context) }
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted = it }
+
+    NavRow(
+        icon = Icons.Default.Folder,
+        title = "All files access",
+        value = if (granted) "Granted" else "Grant",
+        onClick = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val pkg = Uri.parse("package:${context.packageName}")
+                runCatching {
+                    settingsLauncher.launch(
+                        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, pkg)
+                    )
+                }.onFailure {
+                    runCatching {
+                        settingsLauncher.launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                    }
+                }
+            } else {
+                permLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        },
+    )
+}
+
+/** Lists excluded folders (each removable) and an in-app browser to add more. */
+@Composable
+private fun ExcludedFoldersSection(
+    excluded: Set<String>,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    var pickerOpen by remember { mutableStateOf(false) }
+
+    excluded.sorted().forEach { path ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RowIcon(Icons.Default.FolderOff)
+            Text(
+                prettyFolder(path),
+                modifier = Modifier.weight(1f),
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            FilledTonalIconButton(onClick = { onRemove(path) }) {
+                Icon(Icons.Default.Remove, contentDescription = "Remove")
+            }
+        }
+        Divider()
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { pickerOpen = true }
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RowIcon(Icons.Default.Add)
+        Text("Exclude a folder", modifier = Modifier.weight(1f), fontSize = 16.sp)
+    }
+
+    if (pickerOpen) {
+        FolderPickerDialog(
+            onPick = { onAdd(it); pickerOpen = false },
+            onDismiss = { pickerOpen = false },
+        )
+    }
+}
+
+/** A minimal folder browser over shared storage (all-files access lets us list any directory). */
+@Composable
+private fun FolderPickerDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val root = remember { Environment.getExternalStorageDirectory() }
+    var current by remember { mutableStateOf(root) }
+    val dirs by produceState(emptyList<File>(), current) {
+        value = withContext(Dispatchers.IO) {
+            current.listFiles { f -> f.isDirectory && !f.name.startsWith(".") }
+                ?.sortedBy { it.name.lowercase() }
+                ?: emptyList()
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { onPick(current.absolutePath) }) { Text("Exclude this folder") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        title = {
+            Text(prettyFolder(current.absolutePath), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        },
+        text = {
+            Column(
+                Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                if (current.absolutePath != root.absolutePath) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { current = current.parentFile ?: root }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = null)
+                        Text("..", modifier = Modifier.padding(start = 14.dp), fontSize = 16.sp)
+                    }
+                }
+                dirs.forEach { dir ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { current = dir }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Folder, contentDescription = null)
+                        Text(
+                            dir.name,
+                            modifier = Modifier.padding(start = 14.dp),
+                            fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (dirs.isEmpty()) {
+                    Text(
+                        "No subfolders",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                }
+            }
+        },
+    )
+}
+
+private fun hasAllFilesAccess(context: android.content.Context): Boolean =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        Environment.isExternalStorageManager()
+    } else {
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.READ_EXTERNAL_STORAGE,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+private fun prettyFolder(path: String): String {
+    val root = Environment.getExternalStorageDirectory().absolutePath
+    return if (path.startsWith(root)) "Internal storage${path.removePrefix(root)}" else path
 }
 
 @Composable

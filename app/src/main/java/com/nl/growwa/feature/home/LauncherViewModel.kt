@@ -8,6 +8,7 @@ import com.nl.growwa.core.model.AppInfo
 import com.nl.growwa.core.model.AppItem
 import com.nl.growwa.core.model.Container
 import com.nl.growwa.core.model.ContactInfo
+import com.nl.growwa.core.model.FileInfo
 import com.nl.growwa.core.model.FolderItem
 import com.nl.growwa.core.model.HomeItem
 import com.nl.growwa.core.model.IconPackInfo
@@ -18,6 +19,7 @@ import android.os.Build
 import com.nl.growwa.data.widgets.GrowwaWidgetHost
 import com.nl.growwa.data.apps.AppRepository
 import com.nl.growwa.data.contacts.ContactsRepository
+import com.nl.growwa.data.files.FileSearchRepository
 import com.nl.growwa.data.iconpack.IconPackRepository
 import com.nl.growwa.data.layout.FolderEntity
 import com.nl.growwa.data.layout.LayoutRepository
@@ -66,6 +68,7 @@ class LauncherViewModel(
     private val settingsRepository: SettingsRepository,
     private val usageRepository: UsageRepository,
     private val contactsRepository: ContactsRepository,
+    private val fileSearchRepository: FileSearchRepository,
     private val settingsActionRepository: SettingsActionRepository,
     private val iconPackRepository: IconPackRepository,
     private val privateSpaceManager: PrivateSpaceManager,
@@ -196,6 +199,13 @@ class LauncherViewModel(
 
     fun searchSettings(query: String): List<SettingAction> =
         settingsActionRepository.search(query)
+
+    /** On-demand file/folder search over shared storage, honouring excluded folders. */
+    suspend fun searchFiles(query: String): List<FileInfo> =
+        fileSearchRepository.search(query, uiState.value.settings.excludedSearchFolders)
+
+    /** Whether Growwa currently has all-files access for file search. */
+    fun fileAccessGranted(): Boolean = fileSearchRepository.hasAccess()
 
     suspend fun loadIconPacks(): List<IconPackInfo> = iconPackRepository.availablePacks()
 
@@ -346,6 +356,7 @@ class LauncherViewModel(
                 container.settingsRepository,
                 container.usageRepository,
                 container.contactsRepository,
+                container.fileSearchRepository,
                 container.settingsActionRepository,
                 container.iconPackRepository,
                 container.privateSpaceManager,

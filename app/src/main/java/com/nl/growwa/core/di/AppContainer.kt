@@ -3,6 +3,7 @@ package com.nl.growwa.core.di
 import android.content.Context
 import com.nl.growwa.data.apps.AppRepository
 import com.nl.growwa.data.contacts.ContactsRepository
+import com.nl.growwa.data.files.FileSearchRepository
 import com.nl.growwa.data.iconpack.IconPackRepository
 import com.nl.growwa.data.layout.LayoutDatabase
 import com.nl.growwa.data.layout.LayoutRepository
@@ -24,6 +25,7 @@ class AppContainer(context: Context) {
     val appRepository =
         AppRepository(context, appScope, iconPackRepository, settingsRepository, privateSpaceManager)
     val contactsRepository = ContactsRepository(context)
+    val fileSearchRepository = FileSearchRepository(context)
     val settingsActionRepository = SettingsActionRepository()
     val widgetHost = GrowwaWidgetHost(context)
 

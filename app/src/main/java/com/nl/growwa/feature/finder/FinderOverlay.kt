@@ -1,7 +1,12 @@
 package com.nl.growwa.feature.finder
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.provider.ContactsContract
+import android.provider.Settings
+import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -26,6 +31,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -47,15 +54,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.nl.growwa.core.model.AppInfo
 import com.nl.growwa.core.model.ContactInfo
+import com.nl.growwa.core.model.FileInfo
 import com.nl.growwa.core.model.SettingAction
 import com.nl.growwa.feature.components.AppIconCell
 import com.nl.growwa.feature.components.SearchField
+import kotlinx.coroutines.delay
+import java.io.File
 
 /**
  * Finder (swipe down). Shows most-used apps by default; while searching it shows
@@ -67,6 +79,8 @@ fun FinderOverlay(
     searchApps: (String) -> List<AppInfo>,
     searchSettings: (String) -> List<SettingAction>,
     searchContacts: suspend (String) -> List<ContactInfo>,
+    searchFiles: suspend (String) -> List<FileInfo>,
+    fileAccessGranted: () -> Boolean,
     onLaunchApp: (AppInfo) -> Unit,
     onDismiss: () -> Unit,
     backgroundTransparency: Float = 0f,
@@ -88,10 +102,44 @@ fun FinderOverlay(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasContacts = granted }
 
+    var hasFileAccess by remember { mutableStateOf(fileAccessGranted()) }
+    // Re-check after returning from the all-files-access system screen.
+    val allFilesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { hasFileAccess = fileAccessGranted() }
+    val legacyStorageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasFileAccess = granted }
+
     val appResults = remember(query, topApps) { if (searching) searchApps(query) else topApps }
     val settingResults = remember(query) { if (searching) searchSettings(query) else emptyList() }
     val contactResults by produceState(emptyList<ContactInfo>(), query, hasContacts) {
         value = if (searching && hasContacts) searchContacts(query) else emptyList()
+    }
+    // Debounced so it only scans ~250ms after typing stops; each new key cancels the last scan.
+    val fileResults by produceState(emptyList<FileInfo>(), query, hasFileAccess) {
+        value = emptyList()
+        if (searching && hasFileAccess) {
+            delay(250)
+            value = searchFiles(query)
+        }
+    }
+
+    fun requestFileAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val pkg = Uri.parse("package:${context.packageName}")
+            runCatching {
+                allFilesLauncher.launch(
+                    Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, pkg)
+                )
+            }.onFailure {
+                runCatching {
+                    allFilesLauncher.launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                }
+            }
+        } else {
+            legacyStorageLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
     }
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -107,6 +155,24 @@ fun FinderOverlay(
     fun openSetting(s: SettingAction) {
         runCatching {
             context.startActivity(Intent(s.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+        onDismiss()
+    }
+    fun openFile(f: FileInfo) {
+        runCatching {
+            val file = File(f.path)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            val mime = if (f.isDirectory) {
+                "vnd.android.document/directory"
+            } else {
+                MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
+            }
+            val view = Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, mime)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.startActivity(
+                Intent.createChooser(view, "Open with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
         }
         onDismiss()
     }
@@ -168,8 +234,27 @@ fun FinderOverlay(
                 }
             }
 
+            if (!hasFileAccess) {
+                CategoryBox("Files") {
+                    Text(
+                        "Search files and folders on your device.",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                    TextButton(onClick = { requestFileAccess() }) { Text("Allow file access") }
+                }
+            } else if (fileResults.isNotEmpty()) {
+                CategoryBox("Files") {
+                    fileResults.take(MAX_FILES).forEach { f ->
+                        FileRow(f, onSurface) { openFile(f) }
+                    }
+                }
+            }
+
             if (appResults.isEmpty() && settingResults.isEmpty() &&
-                (hasContacts && contactResults.isEmpty())
+                hasContacts && contactResults.isEmpty() &&
+                hasFileAccess && fileResults.isEmpty()
             ) {
                 EmptyHint("No results")
             }
@@ -179,6 +264,7 @@ fun FinderOverlay(
 
 private const val MAX_APPS = 8
 private const val MAX_OTHER = 6
+private const val MAX_FILES = 10
 
 /** An outlined, titled container for one Finder result category. */
 @Composable
@@ -291,6 +377,55 @@ private fun ContactRow(contact: ContactInfo, textColor: androidx.compose.ui.grap
             modifier = Modifier.padding(start = 14.dp),
         )
     }
+}
+
+@Composable
+private fun FileRow(file: FileInfo, textColor: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (file.isDirectory) Icons.Default.Folder else Icons.AutoMirrored.Filled.InsertDriveFile,
+                contentDescription = null,
+                tint = textColor.copy(alpha = 0.7f),
+            )
+        }
+        Column(Modifier.padding(start = 14.dp)) {
+            Text(
+                file.name,
+                color = textColor,
+                fontSize = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                prettyPath(file.path),
+                color = textColor.copy(alpha = 0.6f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** Shows a file's parent folder relative to internal storage, e.g. "Internal storage/Download". */
+private fun prettyPath(path: String): String {
+    val root = Environment.getExternalStorageDirectory().absolutePath
+    val parent = File(path).parent ?: path
+    val rel = if (parent.startsWith(root)) parent.removePrefix(root) else parent
+    return "Internal storage$rel"
 }
 
 @Composable

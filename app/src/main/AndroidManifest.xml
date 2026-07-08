@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Phase 8: file/folder search in Finder. All-files access on R+, legacy read below it. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
     <!-- Phase 6: allows a launcher to see the Android 15+ Private Space profile. -->
     <uses-permission
         android:name="android.permission.ACCESS_HIDDEN_PROFILES"
@@ -84,6 +89,17 @@
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>
         </activity>
+
+        <!-- Phase 8: hands files matched in Finder to other apps via content:// URIs. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Phase 5: performs global actions (shade / lock) for home gestures. -->
         <service

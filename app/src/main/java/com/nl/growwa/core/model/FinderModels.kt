@@ -14,6 +14,15 @@ data class SettingAction(
     val action: String,
 )
 
+/** A file or folder match in Finder results. */
+data class FileInfo(
+    val name: String,
+    val path: String,
+    val isDirectory: Boolean,
+    val size: Long,          // bytes; 0 for folders
+    val lastModified: Long,
+)
+
 /** Bundled, categorized Finder results. */
 data class FinderResults(
     val apps: List<AppInfo> = emptyList(),

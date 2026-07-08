@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -65,6 +66,7 @@ data class LauncherSettings(
     val gestureDoubleTap: GestureAction = GestureAction.LOCK_SCREEN,
     val privateSpacePosition: PrivateSpacePosition = PrivateSpacePosition.TOP,
     val hidePrivateSpace: Boolean = false,
+    val excludedSearchFolders: Set<String> = emptySet(), // absolute paths skipped by file search
 ) {
     companion object {
         const val MAX_DOCK = 7
@@ -102,6 +104,7 @@ class SettingsRepository(private val context: Context) {
         val gestureDoubleTap = intPreferencesKey("gesture_double_tap")
         val privateSpacePosition = intPreferencesKey("private_space_position")
         val hidePrivateSpace = booleanPreferencesKey("hide_private_space")
+        val excludedSearchFolders = stringSetPreferencesKey("excluded_search_folders")
     }
 
     private fun read(p: Preferences): LauncherSettings {
@@ -137,6 +140,7 @@ class SettingsRepository(private val context: Context) {
             privateSpacePosition = PrivateSpacePosition.entries
                 .getOrElse(p[Keys.privateSpacePosition] ?: d.privateSpacePosition.ordinal) { d.privateSpacePosition },
             hidePrivateSpace = p[Keys.hidePrivateSpace] ?: d.hidePrivateSpace,
+            excludedSearchFolders = p[Keys.excludedSearchFolders] ?: d.excludedSearchFolders,
         )
     }
 
@@ -165,6 +169,7 @@ class SettingsRepository(private val context: Context) {
             p[Keys.gestureDoubleTap] = next.gestureDoubleTap.ordinal
             p[Keys.privateSpacePosition] = next.privateSpacePosition.ordinal
             p[Keys.hidePrivateSpace] = next.hidePrivateSpace
+            p[Keys.excludedSearchFolders] = next.excludedSearchFolders
         }
     }
 }

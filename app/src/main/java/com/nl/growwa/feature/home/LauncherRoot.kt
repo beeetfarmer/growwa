@@ -235,6 +235,8 @@ fun LauncherRoot(
                 searchApps = viewModel::searchApps,
                 searchSettings = viewModel::searchSettings,
                 searchContacts = viewModel::searchContacts,
+                searchFiles = viewModel::searchFiles,
+                fileAccessGranted = viewModel::fileAccessGranted,
                 onLaunchApp = viewModel::launch,
                 onDismiss = { overlay = Overlay.NONE },
                 backgroundTransparency = ui.settings.finderTransparency,
