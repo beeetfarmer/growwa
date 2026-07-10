@@ -181,6 +181,8 @@ class LauncherViewModel(
 
     fun openAppInfo(app: AppInfo) = appRepository.openAppInfo(app)
 
+    fun uninstall(app: AppInfo) = appRepository.uninstall(app)
+
     // --- Private Space ---
     fun lockPrivateSpace() = privateSpaceManager.setLocked(true)
     fun unlockPrivateSpace() = privateSpaceManager.setLocked(false)

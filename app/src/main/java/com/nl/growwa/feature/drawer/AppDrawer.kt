@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Lock
@@ -46,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +66,10 @@ import com.nl.growwa.feature.components.SearchField
 
 private const val TAB_APPS = 0
 private const val TAB_PRIVATE = 1
+// Horizontal drag (px) needed to switch drawer tabs.
+private const val SWIPE_TAB = 120f
+// Downward overscroll (px) past the top needed to dismiss the drawer to home.
+private const val PULL_DISMISS = 180f
 
 @Composable
 fun AppDrawer(
@@ -72,7 +78,7 @@ fun AppDrawer(
     privateSpace: PrivateSpaceState,
     settings: LauncherSettings,
     onLaunch: (AppInfo) -> Unit,
-    onAddToHome: (AppInfo) -> Unit,
+    onUninstall: (AppInfo) -> Unit,
     onAddToDock: (AppInfo) -> Unit,
     onAppInfo: (AppInfo) -> Unit,
     onLockPrivate: () -> Unit,
@@ -80,6 +86,7 @@ fun AppDrawer(
     onDragStart: (AppInfo, Offset) -> Unit,
     onDragMove: (Offset) -> Unit,
     onDragEnd: () -> Unit,
+    onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
@@ -131,6 +138,8 @@ fun AppDrawer(
         }
     }
 
+    val gridState = rememberLazyGridState()
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -142,7 +151,46 @@ fun AppDrawer(
         if (showTabs && settings.privateSpacePosition == PrivateSpacePosition.TOP) tabs()
         if (settings.drawerSearch == DrawerSearch.TOP) searchBar()
 
-        Box(Modifier.fillMaxWidth().weight(1f)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                // A non-consuming observer: reads raw finger movement (ignoring consumption) so the
+                // grid still scrolls normally underneath. A downward pull while the grid is at the
+                // top returns to home; a horizontal swipe switches between Apps and Private space.
+                .pointerInput(privateVisible) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val startedAtTop = gridState.firstVisibleItemIndex == 0 &&
+                            gridState.firstVisibleItemScrollOffset == 0
+                        var dx = 0f
+                        var dy = 0f
+                        var dismissed = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                            if (change != null) {
+                                val d = change.positionChangeIgnoreConsumed()
+                                dx += d.x
+                                dy += d.y
+                                if (!dismissed && startedAtTop && dy > PULL_DISMISS &&
+                                    dy > kotlin.math.abs(dx)
+                                ) {
+                                    dismissed = true
+                                    onDismiss()
+                                }
+                            }
+                            if (event.changes.all { !it.pressed }) break
+                        }
+                        if (!dismissed && kotlin.math.abs(dx) > kotlin.math.abs(dy) &&
+                            kotlin.math.abs(dx) > SWIPE_TAB
+                        ) {
+                            if (dx < 0 && privateVisible) { selectedTab = TAB_PRIVATE; query = "" }
+                            else if (dx > 0) { selectedTab = TAB_APPS; query = "" }
+                        }
+                    }
+                },
+        ) {
             if (tab == TAB_PRIVATE && privateSpace.locked) {
                 PrivateLocked(onUnlock = onUnlockPrivate)
             } else {
@@ -150,11 +198,12 @@ fun AppDrawer(
                     apps = shown,
                     columns = settings.drawerColumns,
                     settings = settings,
+                    gridState = gridState,
                     header = if (tab == TAB_PRIVATE) {
                         { PrivateUnlockedHeader(onLock = onLockPrivate) }
                     } else null,
                     onLaunch = onLaunch,
-                    onAddToHome = onAddToHome,
+                    onUninstall = onUninstall,
                     onAddToDock = onAddToDock,
                     onAppInfo = onAppInfo,
                     onDragStart = onDragStart,
@@ -174,9 +223,10 @@ private fun AppGrid(
     apps: List<AppInfo>,
     columns: Int,
     settings: LauncherSettings,
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     header: (@Composable () -> Unit)?,
     onLaunch: (AppInfo) -> Unit,
-    onAddToHome: (AppInfo) -> Unit,
+    onUninstall: (AppInfo) -> Unit,
     onAddToDock: (AppInfo) -> Unit,
     onAppInfo: (AppInfo) -> Unit,
     onDragStart: (AppInfo, Offset) -> Unit,
@@ -185,6 +235,7 @@ private fun AppGrid(
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
+        state = gridState,
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 8.dp),
@@ -196,7 +247,7 @@ private fun AppGrid(
         }
         items(apps, key = { it.key.toString() }) { app ->
             DrawerCell(
-                app, settings, onLaunch, onAddToHome, onAddToDock, onAppInfo,
+                app, settings, onLaunch, onUninstall, onAddToDock, onAppInfo,
                 onDragStart, onDragMove, onDragEnd,
             )
         }
@@ -256,7 +307,7 @@ private fun DrawerCell(
     app: AppInfo,
     settings: LauncherSettings,
     onLaunch: (AppInfo) -> Unit,
-    onAddToHome: (AppInfo) -> Unit,
+    onUninstall: (AppInfo) -> Unit,
     onAddToDock: (AppInfo) -> Unit,
     onAppInfo: (AppInfo) -> Unit,
     onDragStart: (AppInfo, Offset) -> Unit,
@@ -319,9 +370,9 @@ private fun DrawerCell(
             expanded = menuOpen,
             actions = AppMenuActions(
                 onOpen = { onLaunch(app) },
-                onAddToHome = { onAddToHome(app) },
                 onAddToDock = { onAddToDock(app) },
                 onAppInfo = { onAppInfo(app) },
+                onUninstall = { onUninstall(app) },
             ),
             onDismiss = { menuOpen = false },
         )

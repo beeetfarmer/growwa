@@ -55,3 +55,8 @@ PLAN.md
 
 # --- Scratch / design references ---
 screenshots/
+
+# --- Release signing (keep these secret; never commit) ---
+*.jks
+*.keystore
+keystore.properties

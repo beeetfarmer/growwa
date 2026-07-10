@@ -196,15 +196,9 @@ fun LauncherRoot(
                     // Visible only for a normal open. While an app is being dragged out (app != null)
                     // or the drawer is sliding away after a drop (overlay != DRAWER) it stays
                     // transparent — but composed, so the long-press drag keeps receiving events.
-                    .alpha(if (overlay == Overlay.DRAWER && drawerDrag.app == null) 1f else 0f)
-                    .pointerInput(Unit) {
-                        var total = 0f
-                        detectVerticalDragGestures(
-                            onDragStart = { total = 0f },
-                            onDragEnd = { if (total > SWIPE_THRESHOLD) overlay = Overlay.NONE },
-                            onVerticalDrag = { _, dy -> total += dy },
-                        )
-                    },
+                    .alpha(if (overlay == Overlay.DRAWER && drawerDrag.app == null) 1f else 0f),
+                // Pull-to-dismiss is handled inside AppDrawer (nested-scroll on the grid) so it
+                // doesn't swallow the grid's own vertical scrolling.
             ) {
                 AppDrawer(
                     apps = ui.mainApps,
@@ -212,7 +206,7 @@ fun LauncherRoot(
                     privateSpace = ui.privateSpace,
                     settings = ui.settings,
                     onLaunch = { viewModel.launch(it); overlay = Overlay.NONE },
-                    onAddToHome = { viewModel.addToHome(it, homePager.currentPage) },
+                    onUninstall = viewModel::uninstall,
                     onAddToDock = viewModel::addToDock,
                     onAppInfo = viewModel::openAppInfo,
                     onLockPrivate = viewModel::lockPrivateSpace,
@@ -220,6 +214,7 @@ fun LauncherRoot(
                     onDragStart = { app, p -> drawerDrag.app = app; drawerDrag.pointer = p },
                     onDragMove = { drawerDrag.pointer = it },
                     onDragEnd = { drawerDrag.release++ },
+                    onDismiss = { overlay = Overlay.NONE },
                 )
             }
         }

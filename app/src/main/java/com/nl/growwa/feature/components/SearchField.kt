@@ -3,6 +3,7 @@ package com.nl.growwa.feature.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,11 +16,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,8 +40,15 @@ fun SearchField(
     focusRequester: FocusRequester? = null,
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
+    // Always have a requester so tapping anywhere on the pill focuses the field and shows the keyboard.
+    val requester = remember { FocusRequester() }
+    val focus = focusRequester ?: requester
+    val keyboard = LocalSoftwareKeyboardController.current
     Surface(
-        modifier = modifier,
+        modifier = modifier.clickable {
+            focus.requestFocus()
+            keyboard?.show()
+        },
         shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
@@ -62,9 +72,7 @@ fun SearchField(
                     singleLine = true,
                     textStyle = TextStyle(color = onSurface, fontSize = 16.sp),
                     cursorBrush = SolidColor(onSurface),
-                    modifier = if (focusRequester != null) {
-                        Modifier.focusRequester(focusRequester)
-                    } else Modifier,
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
             }
             if (query.isNotEmpty()) {

@@ -2,7 +2,9 @@ package com.nl.growwa.data.apps
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.LauncherApps
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
@@ -132,6 +134,16 @@ class AppRepository(
         runCatching {
             launcherApps.startMainActivity(
                 app.componentName, app.userHandle, sourceBounds, null
+            )
+        }
+    }
+
+    /** Launch the system uninstall flow for an app. */
+    fun uninstall(app: AppInfo) {
+        runCatching {
+            appContext.startActivity(
+                Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.key.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         }
     }
