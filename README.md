@@ -2,6 +2,15 @@
 
 Growwa is an Android launcher. It takes the place of the system home screen and keeps the wallpaper in view, with a simple grid, a frosted dock, and room for widgets.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/home.png" alt="Home" width="220">
+  <img src="docs/sidebar.png" alt="Sidebar" width="220">
+  <img src="docs/drawer.png" alt="App drawer" width="220">
+  <img src="docs/finder.png" alt="Finder" width="220">
+</p>
+
 ## Home
 
 Apps, folders, and widgets sit on the home screen. The world clock shows a few cities at once, and you can add or remove cities after the widget is already placed. Long press a widget to drag it to another spot, pull an edge to change its size, then tap the wallpaper to set it down.
