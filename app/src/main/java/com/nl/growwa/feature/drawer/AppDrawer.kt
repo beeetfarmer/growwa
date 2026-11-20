@@ -65,6 +65,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
@@ -86,6 +87,8 @@ import com.nl.growwa.data.settings.LauncherSettings
 import com.nl.growwa.data.settings.PrivateSpacePosition
 import com.nl.growwa.feature.components.AppIconCell
 import com.nl.growwa.feature.components.SearchField
+import com.nl.growwa.feature.home.inkOn
+import com.nl.growwa.feature.home.rememberWallpaperLuminance
 
 private const val TAB_APPS = 0
 private const val TAB_PRIVATE = 1
@@ -126,6 +129,7 @@ fun AppDrawer(
     val shown = remember(query, source) {
         if (q.isBlank()) source else source.filter { it.label.contains(q, ignoreCase = true) }
     }
+    val ink = drawerInk(settings.drawerTransparency)
 
     val searchBar: @Composable () -> Unit = {
         SearchField(
@@ -141,7 +145,8 @@ fun AppDrawer(
     val tabs: @Composable () -> Unit = {
         TabRow(
             selectedTabIndex = tab,
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            containerColor = Color.Transparent,
+            contentColor = ink,
         ) {
             LeadingIconTab(
                 selected = tab == TAB_APPS,
@@ -236,7 +241,7 @@ fun AppDrawer(
                 },
         ) {
             if (tab == TAB_PRIVATE && privateSpace.locked) {
-                PrivateLocked(onUnlock = onUnlockPrivate)
+                PrivateLocked(ink, onUnlock = onUnlockPrivate)
             } else {
                 AppGrid(
                     apps = shown,
@@ -245,11 +250,12 @@ fun AppDrawer(
                     gridState = gridState,
                     header = when {
                         tab == TAB_PRIVATE -> {
-                            { PrivateUnlockedHeader(onLock = onLockPrivate) }
+                            { PrivateUnlockedHeader(ink, onLock = onLockPrivate) }
                         }
                         q.isBlank() && suggestions.isNotEmpty() -> {
                             {
                                 DrawerSuggestions(
+                                    ink = ink,
                                     apps = suggestions,
                                     columns = settings.drawerColumns,
                                     settings = settings,
@@ -270,6 +276,7 @@ fun AppDrawer(
                     onDragEnd = onDragEnd,
                     onShowMenu = { app, bounds, color -> openMenu = OpenMenu(app, bounds, color) },
                     onHideMenu = { openMenu = null },
+                    ink = ink,
                 )
             }
         }
@@ -298,11 +305,10 @@ fun AppDrawer(
     }
 }
 
-private val DrawerInk = Color.White
-
 /** Suggestions sit on the wallpaper: a plain header, then the icons, then "All apps". */
 @Composable
 private fun DrawerSuggestions(
+    ink: Color,
     apps: List<AppInfo>,
     columns: Int,
     settings: LauncherSettings,
@@ -321,14 +327,14 @@ private fun DrawerSuggestions(
         ) {
             Text(
                 "App suggestions",
-                color = DrawerInk.copy(alpha = 0.92f),
+                color = ink,
                 fontSize = 15.sp,
                 modifier = Modifier.weight(1f),
             )
             Icon(
                 if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                 contentDescription = if (open) "Collapse" else "Expand",
-                tint = DrawerInk.copy(alpha = 0.7f),
+                tint = ink,
                 modifier = Modifier
                     .size(20.dp)
                     .clickable { open = !open },
@@ -340,7 +346,7 @@ private fun DrawerSuggestions(
                     rowApps.forEach { app ->
                         Box(Modifier.weight(1f)) {
                             DrawerCell(
-                                app, settings, DrawerInk, onLaunch,
+                                app, settings, ink, onLaunch,
                                 onDragStart, onDragMove, onDragEnd, onShowMenu, onHideMenu,
                             )
                         }
@@ -351,7 +357,7 @@ private fun DrawerSuggestions(
         }
         Text(
             "All apps",
-            color = DrawerInk.copy(alpha = 0.92f),
+            color = ink,
             fontSize = 15.sp,
             modifier = Modifier.padding(start = 8.dp, top = 14.dp, bottom = 4.dp),
         )
@@ -371,6 +377,7 @@ private fun AppGrid(
     onDragEnd: () -> Unit,
     onShowMenu: (AppInfo, Rect, Color) -> Unit,
     onHideMenu: () -> Unit,
+    ink: Color,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
@@ -386,7 +393,7 @@ private fun AppGrid(
         }
         items(apps, key = { it.key.toString() }) { app ->
             DrawerCell(
-                app, settings, MaterialTheme.colorScheme.onSurface, onLaunch,
+                app, settings, ink, onLaunch,
                 onDragStart, onDragMove, onDragEnd, onShowMenu, onHideMenu,
             )
         }
@@ -394,7 +401,7 @@ private fun AppGrid(
 }
 
 @Composable
-private fun PrivateLocked(onUnlock: () -> Unit) {
+private fun PrivateLocked(ink: Color, onUnlock: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -411,13 +418,13 @@ private fun PrivateLocked(onUnlock: () -> Unit) {
             "Private space is locked",
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = ink,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             "Unlock to see and open your private apps.",
             fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = ink,
         )
         Spacer(Modifier.height(20.dp))
         FilledTonalButton(onClick = onUnlock) {
@@ -427,16 +434,16 @@ private fun PrivateLocked(onUnlock: () -> Unit) {
 }
 
 @Composable
-private fun PrivateUnlockedHeader(onLock: () -> Unit) {
+private fun PrivateUnlockedHeader(ink: Color, onLock: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TextButton(onClick = onLock) {
-            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.Lock, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Lock")
+            Text("Lock", color = ink)
         }
     }
 }
@@ -619,4 +626,13 @@ private fun RowScope.MenuAction(
     ) {
         Icon(icon, contentDescription = label, tint = MenuInk, modifier = Modifier.size(22.dp))
     }
+}
+
+/** Wallpaper, plus the drawer's tinted scrim, picked once per open drawer. */
+@Composable
+private fun drawerInk(transparency: Float): Color {
+    val scrim = ((1f - transparency) * 0.42f).coerceIn(0f, 0.55f)
+    val blended = scrim * MaterialTheme.colorScheme.surface.luminance() +
+        (1f - scrim) * rememberWallpaperLuminance()
+    return inkOn(blended)
 }
