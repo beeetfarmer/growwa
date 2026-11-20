@@ -72,6 +72,10 @@ data class LauncherSettings(
     val dockCornerDp: Float = 28f,
     /** 0 = more solid, 1 = clear. 0.6 keeps the original frosted tray. */
     val dockTransparency: Float = 0.6f,
+    /** When on, the dock shrinks as more apps are added. */
+    val dockDynamicSize: Boolean = true,
+    /** Tray height in dp, used when [dockDynamicSize] is off. */
+    val dockHeightDp: Float = 90f,
     val sidebarApps: List<String> = emptyList(),
     /** 0–1 along the handle's travel, top to bottom. */
     val sidebarAnchor: Float = 0.34f,
@@ -90,6 +94,8 @@ data class LauncherSettings(
         const val MAX_SUGGESTIONS = 10
         const val MIN_DOCK_CORNER_DP = 12f
         const val MAX_DOCK_CORNER_DP = 40f
+        const val MIN_DOCK_HEIGHT_DP = 64f
+        const val MAX_DOCK_HEIGHT_DP = 120f
         const val MAX_SIDEBAR = 8
     }
 }
@@ -124,6 +130,8 @@ class SettingsRepository(private val context: Context) {
         val suggestionCount = intPreferencesKey("suggestion_count")
         val dockCornerDp = floatPreferencesKey("dock_corner_dp")
         val dockTransparency = floatPreferencesKey("dock_transparency")
+        val dockDynamicSize = booleanPreferencesKey("dock_dynamic_size")
+        val dockHeightDp = floatPreferencesKey("dock_height_dp")
         val sidebarApps = stringPreferencesKey("sidebar_apps")
         val sidebarAnchor = floatPreferencesKey("sidebar_anchor")
     }
@@ -167,6 +175,9 @@ class SettingsRepository(private val context: Context) {
             dockCornerDp = (p[Keys.dockCornerDp] ?: d.dockCornerDp)
                 .coerceIn(LauncherSettings.MIN_DOCK_CORNER_DP, LauncherSettings.MAX_DOCK_CORNER_DP),
             dockTransparency = (p[Keys.dockTransparency] ?: d.dockTransparency).coerceIn(0f, 1f),
+            dockDynamicSize = p[Keys.dockDynamicSize] ?: d.dockDynamicSize,
+            dockHeightDp = (p[Keys.dockHeightDp] ?: d.dockHeightDp)
+                .coerceIn(LauncherSettings.MIN_DOCK_HEIGHT_DP, LauncherSettings.MAX_DOCK_HEIGHT_DP),
             sidebarApps = decodeSidebar(p[Keys.sidebarApps]),
             sidebarAnchor = (p[Keys.sidebarAnchor] ?: d.sidebarAnchor).coerceIn(0f, 1f),
         )
@@ -201,6 +212,9 @@ class SettingsRepository(private val context: Context) {
             p[Keys.suggestionCount] = next.suggestionCount
             p[Keys.dockCornerDp] = next.dockCornerDp
             p[Keys.dockTransparency] = next.dockTransparency.coerceIn(0f, 1f)
+            p[Keys.dockDynamicSize] = next.dockDynamicSize
+            p[Keys.dockHeightDp] = next.dockHeightDp
+                .coerceIn(LauncherSettings.MIN_DOCK_HEIGHT_DP, LauncherSettings.MAX_DOCK_HEIGHT_DP)
             p[Keys.sidebarApps] = next.sidebarApps
                 .distinct()
                 .take(LauncherSettings.MAX_SIDEBAR)

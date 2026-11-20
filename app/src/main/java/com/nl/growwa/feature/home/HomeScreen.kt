@@ -1027,25 +1027,28 @@ private fun Dock(
     val items = dock.entries.sortedBy { it.key }
     val count = items.size
 
-    // Auto-size: ≤4 apps stay big (classic iOS dock); 5–6 shrink to stay compact.
-    // Animated so adding/removing an app grows/shrinks the tray smoothly.
+    // Dynamic: ≤4 apps stay big; 5–6 shrink. Off: one height, scaled from that 90dp tray.
+    val heightScale = settings.dockHeightDp / 90f
     val iconSize by animateDpAsState(
-        when {
+        if (settings.dockDynamicSize) when {
             count <= 4 -> 62.dp
             count == 5 -> 54.dp
             else -> 48.dp
-        },
+        } else (62f * heightScale).dp,
         label = "dockIcon",
     )
     val gap by animateDpAsState(
-        when {
+        if (settings.dockDynamicSize) when {
             count <= 4 -> 20.dp
             count == 5 -> 14.dp
             else -> 10.dp
-        },
+        } else (20f * heightScale).dp,
         label = "dockGap",
     )
-    val vPad by animateDpAsState(if (count <= 4) 14.dp else 10.dp, label = "dockPad")
+    val vPad by animateDpAsState(
+        if (settings.dockDynamicSize) if (count <= 4) 14.dp else 10.dp else (14f * heightScale).dp,
+        label = "dockPad",
+    )
     val corner by animateDpAsState(settings.dockCornerDp.dp, label = "dockCorner")
     val shape = RoundedCornerShape(corner)
     // 0.6 is the original tray: 22% white fill, 38% border. 0 is more solid, 1 is clear.
@@ -1059,7 +1062,7 @@ private fun Dock(
             Box(
                 Modifier
                     .padding(bottom = 4.dp)
-                    .size(width = 196.dp, height = 76.dp)
+                    .size(width = 196.dp, height = if (settings.dockDynamicSize) 76.dp else settings.dockHeightDp.dp)
                     .clip(shape)
                     .background(Color.White.copy(alpha = glass))
                     .border(1.dp, Color.White.copy(alpha = rim), shape)
