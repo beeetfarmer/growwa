@@ -167,7 +167,7 @@ private fun WorldClockConfigScreen(
             Button(
                 onClick = { onSave(selected.toList()) },
                 enabled = selected.isNotEmpty(),
-            ) { Text("Add widget") }
+            ) { Text(if (initial.isNotEmpty()) "Save" else "Add widget") }
         }
     }
 }

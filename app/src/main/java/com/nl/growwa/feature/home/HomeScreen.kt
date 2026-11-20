@@ -76,6 +76,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
@@ -87,6 +88,7 @@ import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
+import android.content.Intent
 import android.os.Bundle
 import com.nl.growwa.core.model.AppInfo
 import com.nl.growwa.core.model.AppItem
@@ -739,10 +741,11 @@ private fun HomePage(
             )
         }
 
-        // Resize handles and remove, while a widget is picked up.
+        // Resize handles, plus Cities / Remove, while a widget is picked up.
         edit?.let { d ->
             val info = remember(d.id) { widgetHost.providerInfo(d.id) }
             val mode = info?.resizeMode ?: AppWidgetProviderInfo.RESIZE_BOTH
+            val context = LocalContext.current
             WidgetResizeFrame(
                 draft = d,
                 cols = cols, rows = rows,
@@ -754,22 +757,48 @@ private fun HomePage(
                 blocked = blocked,
                 onChange = { edit = it },
             )
-            Box(
+            Row(
                 Modifier
-                    .offset(x = padX + cellW * d.col + cellW * d.spanX - 36.dp, y = padY + cellH * d.row - 36.dp)
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Color.White)
-                    .pointerInput(d.id) {
-                        detectTapGestures {
-                            onRemoveWidget(d.id)
-                            edit = null
-                            dragOrigin = null
-                        }
-                    },
-                contentAlignment = Alignment.Center,
+                    .offset(x = padX + cellW * d.col, y = padY + cellH * d.row - 36.dp)
+                    .width(cellW * d.spanX),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Outlined.Close, contentDescription = "Remove widget", tint = Color(0xFF1C1C1E), modifier = Modifier.size(16.dp))
+                val configure = info?.configure
+                if (configure != null) {
+                    TextButton(
+                        onClick = {
+                            context.startActivity(
+                                Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE)
+                                    .setComponent(configure)
+                                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, d.id),
+                            )
+                        },
+                    ) {
+                        Text(
+                            if (configure.className.contains("WorldClock")) "Cities" else "Edit",
+                            color = Color.White,
+                        )
+                    }
+                } else {
+                    Spacer(Modifier.width(1.dp))
+                }
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .pointerInput(d.id) {
+                            detectTapGestures {
+                                onRemoveWidget(d.id)
+                                edit = null
+                                dragOrigin = null
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Remove widget", tint = Color(0xFF1C1C1E), modifier = Modifier.size(16.dp))
+                }
             }
         }
     }
