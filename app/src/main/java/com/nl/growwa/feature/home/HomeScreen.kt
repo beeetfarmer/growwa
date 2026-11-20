@@ -65,6 +65,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -940,25 +941,32 @@ private fun Dock(
         },
         label = "dockGap",
     )
-    val vPad by animateDpAsState(if (count <= 4) 16.dp else 12.dp, label = "dockPad")
+    val vPad by animateDpAsState(if (count <= 4) 14.dp else 10.dp, label = "dockPad")
+    val shape = RoundedCornerShape(36.dp)
 
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         if (count == 0) {
             // Empty placeholder so apps can still be dragged into the dock.
             Box(
                 Modifier
-                    .size(width = 180.dp, height = 72.dp)
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(Color.White.copy(alpha = 0.12f))
+                    .padding(bottom = 4.dp)
+                    .size(width = 196.dp, height = 76.dp)
+                    .shadow(12.dp, shape)
+                    .clip(shape)
+                    .background(Color.White.copy(alpha = 0.22f))
+                    .border(1.dp, Color.White.copy(alpha = 0.38f), shape)
                     .onGloballyPositioned { boundsCapture(it) },
             )
             return@Box
         }
-        // Translucent tray hugging its icons (grouped, centred) — classic iOS dock.
+        // Frosted floating tray: light glass, hairline edge, soft shadow.
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(32.dp))
-                .background(Color.White.copy(alpha = 0.16f))
+                .padding(bottom = 4.dp)
+                .shadow(12.dp, shape)
+                .clip(shape)
+                .background(Color.White.copy(alpha = 0.22f))
+                .border(1.dp, Color.White.copy(alpha = 0.38f), shape)
                 .padding(horizontal = 18.dp, vertical = vPad)
                 .onGloballyPositioned { boundsCapture(it) },
             horizontalArrangement = Arrangement.spacedBy(gap),
