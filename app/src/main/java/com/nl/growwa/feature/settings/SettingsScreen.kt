@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Height
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Tab
 import androidx.compose.material.icons.filled.TableRows
 import androidx.compose.material.icons.filled.TouchApp
@@ -162,6 +164,21 @@ fun SettingsScreen(
                     settings.dockTransparency,
                     0f..1f,
                 ) { v -> onUpdate { it.copy(dockTransparency = v) } }
+                Divider()
+                SwitchRow(
+                    Icons.Default.SwapVert,
+                    "Adjust dock size dynamically",
+                    settings.dockDynamicSize,
+                ) { v -> onUpdate { it.copy(dockDynamicSize = v) } }
+                Divider()
+                SliderRow(
+                    Icons.Default.Height,
+                    "Dock height",
+                    "${settings.dockHeightDp.roundToInt()} dp",
+                    settings.dockHeightDp,
+                    LauncherSettings.MIN_DOCK_HEIGHT_DP..LauncherSettings.MAX_DOCK_HEIGHT_DP,
+                    enabled = !settings.dockDynamicSize,
+                ) { v -> onUpdate { it.copy(dockHeightDp = v) } }
                 Divider()
                 StepperRow(
                     Icons.Default.GridView, "Drawer columns", settings.drawerColumns,
@@ -497,18 +514,25 @@ private fun SliderRow(
     valueLabel: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    enabled: Boolean = true,
     onChange: (Float) -> Unit,
 ) {
+    val faded = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
     Column(Modifier.padding(horizontal = 18.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             RowIcon(icon)
-            Text(title, modifier = Modifier.weight(1f), fontSize = 16.sp)
-            Text(valueLabel, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+            Text(title, modifier = Modifier.weight(1f), fontSize = 16.sp, color = if (enabled) Color.Unspecified else faded)
+            Text(
+                valueLabel,
+                color = if (enabled) MaterialTheme.colorScheme.primary else faded,
+                fontWeight = FontWeight.Medium,
+            )
         }
         Slider(
             value = value,
             onValueChange = onChange,
             valueRange = range,
+            enabled = enabled,
             modifier = Modifier.padding(start = 42.dp),
         )
     }
