@@ -203,6 +203,7 @@ fun LauncherRoot(
             ) {
                 AppDrawer(
                     apps = ui.mainApps,
+                    suggestions = ui.topApps.ifEmpty { ui.mainApps.take(10) },
                     privateApps = ui.privateApps,
                     privateSpace = ui.privateSpace,
                     settings = ui.settings,
