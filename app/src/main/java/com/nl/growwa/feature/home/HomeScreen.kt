@@ -1055,6 +1055,10 @@ private fun Dock(
     val vPad by animateDpAsState(if (count <= 4) 14.dp else 10.dp, label = "dockPad")
     val corner by animateDpAsState(settings.dockCornerDp.dp, label = "dockCorner")
     val shape = RoundedCornerShape(corner)
+    // 0.6 is the original tray: 22% white fill, 38% border. 0 is more solid, 1 is clear.
+    val shade = ((1f - settings.dockTransparency) / 0.4f).coerceIn(0f, 2.5f)
+    val glass = (0.22f * shade).coerceIn(0f, 0.55f)
+    val rim = (0.38f * shade).coerceIn(0f, 0.7f)
 
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         if (count == 0) {
@@ -1064,8 +1068,8 @@ private fun Dock(
                     .padding(bottom = 4.dp)
                     .size(width = 196.dp, height = 76.dp)
                     .clip(shape)
-                    .background(Color.White.copy(alpha = 0.22f))
-                    .border(1.dp, Color.White.copy(alpha = 0.38f), shape)
+                    .background(Color.White.copy(alpha = glass))
+                    .border(1.dp, Color.White.copy(alpha = rim), shape)
                     .onGloballyPositioned { boundsCapture(it) },
             )
             return@Box
@@ -1075,8 +1079,8 @@ private fun Dock(
             modifier = Modifier
                 .padding(bottom = 4.dp)
                 .clip(shape)
-                .background(Color.White.copy(alpha = 0.22f))
-                .border(1.dp, Color.White.copy(alpha = 0.38f), shape)
+                .background(Color.White.copy(alpha = glass))
+                .border(1.dp, Color.White.copy(alpha = rim), shape)
                 .padding(horizontal = 18.dp, vertical = vPad)
                 .onGloballyPositioned { boundsCapture(it) },
             horizontalArrangement = Arrangement.spacedBy(gap),

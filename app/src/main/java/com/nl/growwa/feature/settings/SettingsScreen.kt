@@ -155,6 +155,14 @@ fun SettingsScreen(
                     LauncherSettings.MIN_DOCK_CORNER_DP..LauncherSettings.MAX_DOCK_CORNER_DP,
                 ) { v -> onUpdate { it.copy(dockCornerDp = v) } }
                 Divider()
+                SliderRow(
+                    Icons.Default.Opacity,
+                    "Dock transparency",
+                    "${(settings.dockTransparency * 100).roundToInt()}%",
+                    settings.dockTransparency,
+                    0f..1f,
+                ) { v -> onUpdate { it.copy(dockTransparency = v) } }
+                Divider()
                 StepperRow(
                     Icons.Default.GridView, "Drawer columns", settings.drawerColumns,
                     LauncherSettings.MIN_COLUMNS, LauncherSettings.MAX_COLUMNS,
