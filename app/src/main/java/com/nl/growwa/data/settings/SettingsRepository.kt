@@ -70,6 +70,8 @@ data class LauncherSettings(
     val recentSearches: List<String> = emptyList(),
     val suggestionCount: Int = 5,
     val dockCornerDp: Float = 28f,
+    /** 0 = more solid, 1 = clear. 0.6 keeps the original frosted tray. */
+    val dockTransparency: Float = 0.6f,
     val sidebarApps: List<String> = emptyList(),
     /** 0–1 along the handle's travel, top to bottom. */
     val sidebarAnchor: Float = 0.34f,
@@ -121,6 +123,7 @@ class SettingsRepository(private val context: Context) {
         val recentSearches = stringPreferencesKey("recent_searches")
         val suggestionCount = intPreferencesKey("suggestion_count")
         val dockCornerDp = floatPreferencesKey("dock_corner_dp")
+        val dockTransparency = floatPreferencesKey("dock_transparency")
         val sidebarApps = stringPreferencesKey("sidebar_apps")
         val sidebarAnchor = floatPreferencesKey("sidebar_anchor")
     }
@@ -163,6 +166,7 @@ class SettingsRepository(private val context: Context) {
                 .coerceIn(LauncherSettings.MIN_SUGGESTIONS, LauncherSettings.MAX_SUGGESTIONS),
             dockCornerDp = (p[Keys.dockCornerDp] ?: d.dockCornerDp)
                 .coerceIn(LauncherSettings.MIN_DOCK_CORNER_DP, LauncherSettings.MAX_DOCK_CORNER_DP),
+            dockTransparency = (p[Keys.dockTransparency] ?: d.dockTransparency).coerceIn(0f, 1f),
             sidebarApps = decodeSidebar(p[Keys.sidebarApps]),
             sidebarAnchor = (p[Keys.sidebarAnchor] ?: d.sidebarAnchor).coerceIn(0f, 1f),
         )
@@ -196,6 +200,7 @@ class SettingsRepository(private val context: Context) {
             p[Keys.recentSearches] = next.recentSearches.take(8).joinToString("\n")
             p[Keys.suggestionCount] = next.suggestionCount
             p[Keys.dockCornerDp] = next.dockCornerDp
+            p[Keys.dockTransparency] = next.dockTransparency.coerceIn(0f, 1f)
             p[Keys.sidebarApps] = next.sidebarApps
                 .distinct()
                 .take(LauncherSettings.MAX_SIDEBAR)
