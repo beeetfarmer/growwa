@@ -260,6 +260,8 @@ class LayoutRepository(
         return null
     }
 
+    suspend fun reorderHomePage(from: Int, to: Int) = dao.reorderHomePages(from, to)
+
     suspend fun removeWidget(appWidgetId: Int): Boolean {
         val p = dao.widgetPlacement(appWidgetId) ?: return false
         dao.removeSlot(p.container, p.page, p.position)

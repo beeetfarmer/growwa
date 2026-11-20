@@ -148,6 +148,7 @@ fun HomeScreen(
     drawerDrag: DrawerDragState,
     onExternalDrop: (AppInfo, DropSlot) -> Unit,
     onExternalDragEnd: () -> Unit,
+    editing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -288,6 +289,9 @@ fun HomeScreen(
             pendingFrom = null
         }
     }
+    LaunchedEffect(editing) {
+        if (editing) dockBounds.value = Rect.Zero
+    }
 
     // Dwell timer: hovering over another app for a moment arms folder creation.
     LaunchedEffect(hoverSlot, drag) {
@@ -303,13 +307,15 @@ fun HomeScreen(
     Box(
         modifier
             .fillMaxSize()
+            .background(if (editing) Color.Black.copy(alpha = 0.22f) else Color.Transparent)
             .onGloballyPositioned { rootCoords.value = it },
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.systemBars)
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 8.dp)
+                .padding(top = if (editing) 28.dp else 0.dp, bottom = if (editing) 156.dp else 0.dp),
         ) {
             HorizontalPager(
                 state = pagerState,
@@ -351,9 +357,11 @@ fun HomeScreen(
                     onDeleteFolder = { id -> menuSlot = null; onDeleteFolder(id) },
                     folderTarget = folderTarget,
                     toRoot = toRoot,
+                    editing = editing,
                 )
             }
 
+            if (!editing) {
             PageIndicator(count = pagerState.pageCount, current = pagerState.currentPage)
             Spacer(Modifier.height(8.dp))
 
@@ -384,6 +392,7 @@ fun HomeScreen(
                 onRemove = { pos -> menuSlot = null; onRemoveFromDock(pos) },
             )
             Spacer(Modifier.height(12.dp))
+            }
         }
 
         // Remove target: shown at the top while dragging an existing home/dock item.
@@ -473,6 +482,7 @@ private fun HomePage(
     onDeleteFolder: (id: Long) -> Unit,
     folderTarget: DropSlot?,
     toRoot: (LayoutCoordinates, Offset) -> Offset,
+    editing: Boolean,
 ) {
     val cols = settings.homeColumns
     val rows = settings.homeRows
@@ -542,6 +552,18 @@ private fun HomePage(
                                 )
                             }
                             val item = pageApps[pos]
+                            if (editing && !dragging && item == null && pos !in widgetCells) {
+                                Box(
+                                    Modifier
+                                        .matchParentSize()
+                                        .padding(8.dp)
+                                        .border(
+                                            1.25.dp,
+                                            Color.White.copy(alpha = 0.7f),
+                                            RoundedCornerShape(18.dp),
+                                        ),
+                                )
+                            }
                             if (item != null) {
                                 ItemCell(
                                     item = item,
@@ -570,6 +592,19 @@ private fun HomePage(
                                         )
                                     },
                                 )
+                                if (editing) {
+                                    Box(
+                                        Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(top = 2.dp, end = 2.dp)
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White)
+                                            .pointerInput(pos) {
+                                                detectTapGestures { onRemove(pos) }
+                                            },
+                                    )
+                                }
                             }
                         }
                     }
