@@ -38,7 +38,7 @@ jobs:
       - name: Dependency audit (fail on fixable HIGH or CRITICAL)
         # Gradle has no lockfile here, so write one for Trivy to read: only what ships in the release APK.
         run: |
-          echo 'allprojects { configurations.matching { it.name.endsWith("ReleaseRuntimeClasspath") }.configureEach { resolutionStrategy.activateDependencyLocking() } }' > /tmp/lock.gradle
+          echo 'allprojects { configurations.matching { it.name == "releaseRuntimeClasspath" || it.name.endsWith("ReleaseRuntimeClasspath") }.configureEach { resolutionStrategy.activateDependencyLocking() } }' > /tmp/lock.gradle
           ./gradlew --no-daemon -q --init-script /tmp/lock.gradle :app:dependencies --write-locks > /dev/null
           curl -sfL -o /tmp/trivy.tgz https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz
           echo "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a  /tmp/trivy.tgz" | sha256sum -c -
