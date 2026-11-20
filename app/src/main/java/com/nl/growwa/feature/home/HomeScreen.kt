@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -332,6 +333,8 @@ fun HomeScreen(
         }
     }
 
+    val ink = inkOn(rememberWallpaperLuminance())
+    CompositionLocalProvider(LocalWallpaperInk provides ink) {
     Box(
         modifier
             .fillMaxSize()
@@ -483,6 +486,7 @@ fun HomeScreen(
                 ItemVisual(d.item, settings, showLabel = false, iconSizeDp = settings.iconSizeDp)
             }
         }
+    }
     }
 
     // Folder contents dialog (re-derived from current layout by id).
@@ -777,7 +781,7 @@ private fun HomePage(
                     ) {
                         Text(
                             if (configure.className.contains("WorldClock")) "Cities" else "Edit",
-                            color = Color.White,
+                            color = LocalWallpaperInk.current,
                         )
                     }
                 } else {
@@ -1240,7 +1244,7 @@ private fun ItemVisual(
                     is AppItem -> item.app.label
                     is FolderItem -> item.name
                 },
-                color = Color.White,
+                color = LocalWallpaperInk.current,
                 fontSize = settings.labelSizeSp.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

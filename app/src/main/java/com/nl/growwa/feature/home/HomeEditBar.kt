@@ -62,7 +62,7 @@ fun HomeEditChrome(
     Box(modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars)) {
         Text(
             "Hold and drag a thumbnail to reorder",
-            color = Color.White,
+            color = inkOn(rememberWallpaperLuminance()),
             fontSize = 15.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier
