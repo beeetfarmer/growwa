@@ -30,12 +30,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.dp
 import android.content.Intent
 import android.provider.Settings
 import com.nl.growwa.data.settings.GestureAction
@@ -94,11 +97,18 @@ fun LauncherRoot(
 
     BackHandler(enabled = overlay != Overlay.NONE) { overlay = Overlay.NONE }
 
+    val finderOpen = overlay == Overlay.FINDER
+    WallpaperBlur(enabled = finderOpen)
+
     Box(modifier.fillMaxSize()) {
         // Home surface with swipe-up (drawer) / swipe-down (finder) detection.
         Box(
             Modifier
                 .fillMaxSize()
+                .then(
+                    if (finderOpen) Modifier.blur(28.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+                    else Modifier,
+                )
                 .pointerInput(Unit) {
                     var total = 0f
                     detectVerticalDragGestures(
@@ -227,12 +237,16 @@ fun LauncherRoot(
         ) {
             FinderOverlay(
                 topApps = ui.topApps,
+                recentSearches = ui.settings.recentSearches,
                 searchApps = viewModel::searchApps,
                 searchSettings = viewModel::searchSettings,
                 searchContacts = viewModel::searchContacts,
                 searchFiles = viewModel::searchFiles,
                 fileAccessGranted = viewModel::fileAccessGranted,
                 onLaunchApp = viewModel::launch,
+                onRememberSearch = viewModel::rememberFinderQuery,
+                onClearSearches = viewModel::clearFinderQueries,
+                onOpenSettings = { overlay = Overlay.SETTINGS },
                 onDismiss = { overlay = Overlay.NONE },
                 backgroundTransparency = ui.settings.finderTransparency,
             )

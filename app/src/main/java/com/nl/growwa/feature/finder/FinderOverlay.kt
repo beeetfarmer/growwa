@@ -12,16 +12,20 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
@@ -29,11 +33,16 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -50,9 +59,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,24 +77,27 @@ import com.nl.growwa.core.model.AppInfo
 import com.nl.growwa.core.model.ContactInfo
 import com.nl.growwa.core.model.FileInfo
 import com.nl.growwa.core.model.SettingAction
-import com.nl.growwa.feature.components.AppIconCell
-import com.nl.growwa.feature.components.SearchField
+import com.nl.growwa.feature.components.AppSuggestionsCard
 import kotlinx.coroutines.delay
 import java.io.File
 
 /**
- * Finder (swipe down). Shows most-used apps by default; while searching it shows
- * results grouped into separate Apps / Contacts / Settings sections.
+ * Finder (swipe down). A search pill, recent-query chips, and an app-suggestions card
+ * float on the blurred wallpaper. Contacts, settings, and files still appear while searching.
  */
 @Composable
 fun FinderOverlay(
     topApps: List<AppInfo>,
+    recentSearches: List<String>,
     searchApps: (String) -> List<AppInfo>,
     searchSettings: (String) -> List<SettingAction>,
     searchContacts: suspend (String) -> List<ContactInfo>,
     searchFiles: suspend (String) -> List<FileInfo>,
     fileAccessGranted: () -> Boolean,
     onLaunchApp: (AppInfo) -> Unit,
+    onRememberSearch: (String) -> Unit,
+    onClearSearches: () -> Unit,
+    onOpenSettings: () -> Unit,
     onDismiss: () -> Unit,
     backgroundTransparency: Float = 0f,
 ) {
@@ -89,6 +105,7 @@ fun FinderOverlay(
     var query by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    var keyboardOpen by remember { mutableStateOf(true) }
     val searching = query.isNotBlank()
     val onSurface = MaterialTheme.colorScheme.onSurface
 
@@ -142,10 +159,22 @@ fun FinderOverlay(
         }
     }
 
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboard?.show()
+    }
 
-    fun launchApp(app: AppInfo) { keyboard?.hide(); onLaunchApp(app); onDismiss() }
+    fun rememberIfTyped() {
+        if (query.isNotBlank()) onRememberSearch(query)
+    }
+    fun launchApp(app: AppInfo) {
+        rememberIfTyped()
+        keyboard?.hide()
+        onLaunchApp(app)
+        onDismiss()
+    }
     fun openContact(c: ContactInfo) {
+        rememberIfTyped()
         runCatching {
             val uri = ContactsContract.Contacts.getLookupUri(c.id, c.lookupKey)
             context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -153,12 +182,14 @@ fun FinderOverlay(
         onDismiss()
     }
     fun openSetting(s: SettingAction) {
+        rememberIfTyped()
         runCatching {
             context.startActivity(Intent(s.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         onDismiss()
     }
     fun openFile(f: FileInfo) {
+        rememberIfTyped()
         runCatching {
             val file = File(f.path)
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -177,42 +208,51 @@ fun FinderOverlay(
         onDismiss()
     }
 
-    Column(
-        modifier = Modifier
+    val scrim = ((1f - backgroundTransparency) * 0.2f).coerceIn(0f, 0.35f)
+    Box(
+        Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 1f - backgroundTransparency))
             .windowInsetsPadding(WindowInsets.systemBars)
-            .imePadding()
-            .padding(16.dp),
+            .imePadding(),
     ) {
-        SearchField(
-            query = query,
-            onQueryChange = { query = it },
-            hint = "Search apps, contacts, settings",
-            modifier = Modifier.fillMaxWidth(),
-            focusRequester = focusRequester,
-        )
-
-        Column(
+        // Eat taps on the empty wallpaper so they don't launch icons underneath.
+        Box(
             Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(top = 8.dp),
-        ) {
-            if (!searching) {
-                if (topApps.isEmpty()) {
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = scrim))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                ),
+        )
+        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            FinderSearchBar(
+                query = query,
+                onQueryChange = { query = it },
+                onSearch = { rememberIfTyped(); focusRequester.requestFocus() },
+                focusRequester = focusRequester,
+            )
+            RecentChips(
+                queries = recentSearches,
+                onPick = { query = it },
+                onClear = onClearSearches,
+            )
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 12.dp),
+            ) {
+                val suggested = if (searching) appResults else topApps
+                if (suggested.isNotEmpty()) {
+                    AppSuggestionsCard(suggested.take(MAX_APPS), ::launchApp)
+                } else if (!searching) {
                     EmptyHint("Your most-used apps will appear here")
-                } else {
-                    CategoryBox("Suggestions") { AppsGrid(topApps, ::launchApp) }
                 }
-                return@Column
-            }
 
-            if (appResults.isNotEmpty()) {
-                AppsCategory(appResults, ::launchApp)
-            }
-
-            if (!hasContacts || contactResults.isNotEmpty()) {
+                if (searching && (!hasContacts || contactResults.isNotEmpty())) {
                 CategoryBox("Contacts") {
                     if (!hasContacts) {
                         TextButton(onClick = {
@@ -226,7 +266,7 @@ fun FinderOverlay(
                 }
             }
 
-            if (settingResults.isNotEmpty()) {
+            if (searching && settingResults.isNotEmpty()) {
                 CategoryBox("Settings") {
                     settingResults.take(MAX_OTHER).forEach { s ->
                         SettingRow(s, onSurface) { openSetting(s) }
@@ -234,7 +274,7 @@ fun FinderOverlay(
                 }
             }
 
-            if (!hasFileAccess) {
+            if (searching && !hasFileAccess) {
                 CategoryBox("Files") {
                     Text(
                         "Search files and folders on your device.",
@@ -244,7 +284,7 @@ fun FinderOverlay(
                     )
                     TextButton(onClick = { requestFileAccess() }) { Text("Allow file access") }
                 }
-            } else if (fileResults.isNotEmpty()) {
+            } else if (searching && fileResults.isNotEmpty()) {
                 CategoryBox("Files") {
                     fileResults.take(MAX_FILES).forEach { f ->
                         FileRow(f, onSurface) { openFile(f) }
@@ -252,17 +292,31 @@ fun FinderOverlay(
                 }
             }
 
-            if (appResults.isEmpty() && settingResults.isEmpty() &&
+            if (searching && appResults.isEmpty() && settingResults.isEmpty() &&
                 hasContacts && contactResults.isEmpty() &&
                 hasFileAccess && fileResults.isEmpty()
             ) {
                 EmptyHint("No results")
             }
+            }
+            FinderBottomBar(
+                onKeyboard = {
+                    if (keyboardOpen) {
+                        keyboard?.hide()
+                        keyboardOpen = false
+                    } else {
+                        focusRequester.requestFocus()
+                        keyboard?.show()
+                        keyboardOpen = true
+                    }
+                },
+                onSettings = onOpenSettings,
+            )
         }
     }
 }
 
-private const val MAX_APPS = 8
+private const val MAX_APPS = 10
 private const val MAX_OTHER = 6
 private const val MAX_FILES = 10
 
@@ -291,24 +345,6 @@ private fun CategoryBox(title: String, content: @Composable ColumnScope.() -> Un
     }
 }
 
-/** Apps category: shows up to [MAX_APPS], expandable to reveal the rest. */
-@Composable
-private fun AppsCategory(apps: List<AppInfo>, onClick: (AppInfo) -> Unit) {
-    var expanded by remember(apps) { mutableStateOf(false) }
-    val shown = if (expanded || apps.size <= MAX_APPS) apps else apps.take(MAX_APPS)
-    CategoryBox("Apps") {
-        AppsGrid(shown, onClick)
-        if (apps.size > MAX_APPS) {
-            TextButton(
-                onClick = { expanded = !expanded },
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(if (expanded) "Show less" else "Show all ${apps.size}")
-            }
-        }
-    }
-}
-
 @Composable
 private fun EmptyHint(text: String) {
     Text(
@@ -318,28 +354,134 @@ private fun EmptyHint(text: String) {
     )
 }
 
+private val Ink = Color(0xFF1C1C1E)
+
 @Composable
-private fun AppsGrid(apps: List<AppInfo>, onClick: (AppInfo) -> Unit) {
-    val cols = 4
-    apps.chunked(cols).forEach { rowApps ->
-        Row(Modifier.fillMaxWidth()) {
-            rowApps.forEach { app ->
-                Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                    AppIconCell(
-                        icon = app.icon,
-                        label = app.label,
-                        iconSize = 52.dp,
-                        labelSize = 12.sp,
-                        showLabel = true,
-                        onClick = { onClick(app) },
-                        onLongClick = { },
-                        modifier = Modifier.fillMaxWidth(),
-                        labelColor = MaterialTheme.colorScheme.onSurface,
-                    )
+private fun FinderSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    focusRequester: FocusRequester,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color.White.copy(alpha = 0.92f))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = TextStyle(color = Ink, fontSize = 17.sp),
+            cursorBrush = SolidColor(Color(0xFF3478F6)),
+            modifier = Modifier.weight(1f).focusRequester(focusRequester),
+            decorationBox = { inner ->
+                Box {
+                    if (query.isEmpty()) {
+                        Text("Search", color = Ink.copy(alpha = 0.4f), fontSize = 17.sp)
+                    }
+                    inner()
                 }
-            }
-            repeat(cols - rowApps.size) { Spacer(Modifier.weight(1f)) }
+            },
+        )
+        if (query.isNotEmpty()) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Clear",
+                tint = Ink.copy(alpha = 0.55f),
+                modifier = Modifier
+                    .padding(end = 4.dp)
+                    .size(20.dp)
+                    .clickable { onQueryChange("") },
+            )
         }
+        Box(
+            Modifier
+                .padding(horizontal = 8.dp)
+                .width(1.dp)
+                .height(18.dp)
+                .background(Ink.copy(alpha = 0.18f)),
+        )
+        Icon(
+            Icons.Default.Search,
+            contentDescription = "Search",
+            tint = Ink.copy(alpha = 0.75f),
+            modifier = Modifier.size(22.dp).clickable(onClick = onSearch),
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RecentChips(
+    queries: List<String>,
+    onPick: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    if (queries.isEmpty()) return
+    FlowRow(
+        Modifier.fillMaxWidth().padding(top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        queries.forEach { q ->
+            Text(
+                q,
+                color = Ink,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.55f))
+                    .clickable { onPick(q) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+        Icon(
+            Icons.Default.Delete,
+            contentDescription = "Clear recent searches",
+            tint = Ink.copy(alpha = 0.7f),
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.55f))
+                .clickable(onClick = onClear)
+                .padding(6.dp)
+                .size(16.dp),
+        )
+    }
+}
+
+@Composable
+private fun FinderBottomBar(onKeyboard: () -> Unit, onSettings: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color.White.copy(alpha = 0.86f))
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FinderBarButton(Icons.Default.Keyboard, "Keyboard", onKeyboard)
+        FinderBarButton(Icons.Default.Settings, "Settings", onSettings)
+    }
+}
+
+@Composable
+private fun FinderBarButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        Modifier.clickable(onClick = onClick).padding(horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = null, tint = Ink, modifier = Modifier.size(22.dp))
+        Text(label, color = Ink, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
     }
 }
 

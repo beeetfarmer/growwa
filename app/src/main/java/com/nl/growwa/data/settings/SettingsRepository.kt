@@ -67,6 +67,7 @@ data class LauncherSettings(
     val privateSpacePosition: PrivateSpacePosition = PrivateSpacePosition.TOP,
     val hidePrivateSpace: Boolean = false,
     val excludedSearchFolders: Set<String> = emptySet(), // absolute paths skipped by file search
+    val recentSearches: List<String> = emptyList(),
 ) {
     companion object {
         const val MAX_DOCK = 7
@@ -105,6 +106,7 @@ class SettingsRepository(private val context: Context) {
         val privateSpacePosition = intPreferencesKey("private_space_position")
         val hidePrivateSpace = booleanPreferencesKey("hide_private_space")
         val excludedSearchFolders = stringSetPreferencesKey("excluded_search_folders")
+        val recentSearches = stringPreferencesKey("recent_searches")
     }
 
     private fun read(p: Preferences): LauncherSettings {
@@ -141,6 +143,7 @@ class SettingsRepository(private val context: Context) {
                 .getOrElse(p[Keys.privateSpacePosition] ?: d.privateSpacePosition.ordinal) { d.privateSpacePosition },
             hidePrivateSpace = p[Keys.hidePrivateSpace] ?: d.hidePrivateSpace,
             excludedSearchFolders = p[Keys.excludedSearchFolders] ?: d.excludedSearchFolders,
+            recentSearches = decodeSearches(p[Keys.recentSearches]),
         )
     }
 
@@ -170,6 +173,11 @@ class SettingsRepository(private val context: Context) {
             p[Keys.privateSpacePosition] = next.privateSpacePosition.ordinal
             p[Keys.hidePrivateSpace] = next.hidePrivateSpace
             p[Keys.excludedSearchFolders] = next.excludedSearchFolders
+            p[Keys.recentSearches] = next.recentSearches.take(8).joinToString("\n")
         }
     }
 }
+
+private fun decodeSearches(raw: String?): List<String> =
+    raw?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct()?.take(8)
+        ?: emptyList()
