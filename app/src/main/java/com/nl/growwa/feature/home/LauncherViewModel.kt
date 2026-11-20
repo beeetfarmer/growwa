@@ -215,6 +215,18 @@ class LauncherViewModel(
         settingsRepository.update(transform)
     }
 
+    /** Keep a Finder query on the recent-search chips. Blank and one-character queries are ignored. */
+    fun rememberFinderQuery(query: String) {
+        val q = query.trim().replace('\n', ' ')
+        if (q.length < 2) return
+        updateSettings { s ->
+            val next = listOf(q) + s.recentSearches.filterNot { it.equals(q, ignoreCase = true) }
+            s.copy(recentSearches = next.take(8))
+        }
+    }
+
+    fun clearFinderQueries() = updateSettings { it.copy(recentSearches = emptyList()) }
+
     fun addToHome(app: AppInfo, page: Int) = viewModelScope.launch {
         val s = uiState.value.settings
         val capacity = s.homeColumns * s.homeRows
@@ -368,7 +380,7 @@ class LauncherViewModel(
     }
 
     companion object {
-        const val FINDER_TOP_COUNT = 5
+        const val FINDER_TOP_COUNT = 10
         const val DOCK_MAX = 6
     }
 }
