@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.OpenWith
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -118,6 +120,11 @@ class DrawerDragState {
 /** Sentinel [DropSlot] marking a drag that came from the drawer (no existing placement). */
 private val EXTERNAL_SLOT = DropSlot("external", -1, -1)
 
+/** How a drag that started in the drawer ended. */
+sealed class ExternalDragResult {
+    data class Place(val app: AppInfo, val slot: DropSlot) : ExternalDragResult()
+}
+
 /** Live geometry of the widget currently being resized (in grid cells). */
 private data class ResizeDraft(
     val id: Int,
@@ -161,7 +168,9 @@ fun HomeScreen(
     val gridBounds = remember { mutableStateOf(Rect.Zero) }
     val dockBounds = remember { mutableStateOf(Rect.Zero) }
     val removeBounds = remember { mutableStateOf(Rect.Zero) }
+    val cancelBounds = remember { mutableStateOf(Rect.Zero) }
     var overRemove by remember { mutableStateOf(false) }
+    var overCancel by remember { mutableStateOf(false) }
     val rootCoords = remember { mutableStateOf<LayoutCoordinates?>(null) }
     var hoverSlot by remember { mutableStateOf<DropSlot?>(null) }
     // When the pointer dwells over another app, we switch from "swap" to "make folder".
@@ -236,29 +245,45 @@ fun HomeScreen(
             fun cancel() { drag = null; hoverSlot = null; folderTarget = null; overRemove = false }
 
             // --- Drag originating from the drawer (places a brand-new app) ---
+            fun rootPoint(p: Offset): Offset = rootCoords.value?.windowToLocal(p) ?: p
+            fun zone(bounds: Rect, p: Offset) = bounds.width > 0f && bounds.inflate(120f).contains(p)
             fun startExternal(app: AppInfo, p: Offset) {
-                drag = DragSession(AppItem(app), EXTERNAL_SLOT, p, p)
+                val local = rootPoint(p)
+                drag = DragSession(AppItem(app), EXTERNAL_SLOT, local, local)
                 hoverSlot = null
                 folderTarget = null
+                overCancel = false
             }
             fun moveExternal(p: Offset) {
                 if (drag == null) return
-                drag = drag?.copy(pointer = p)
-                val t = computeTarget(p, latestSettings, gridBounds.value, dockBounds.value, latestPage, latestDockCount)
+                val local = rootPoint(p)
+                drag = drag?.copy(pointer = local)
+                if (zone(cancelBounds.value, local)) {
+                    overCancel = true
+                    hoverSlot = null
+                    folderTarget = null
+                    return
+                }
+                overCancel = false
+                val t = computeTarget(local, latestSettings, gridBounds.value, dockBounds.value, latestPage, latestDockCount)
                 if (t != hoverSlot) folderTarget = null
                 hoverSlot = t
             }
-            /** Ends an external drag, returning the app and the slot it was dropped on (if any). */
-            fun endExternal(): Pair<AppInfo, DropSlot?>? {
+            /** Ends a drawer drag: place on a slot, or cancel when released on the X. */
+            fun endExternal(): ExternalDragResult? {
                 val d = drag ?: return null
                 val hv = hoverSlot
+                val p = d.pointer
+                val cancel = zone(cancelBounds.value, p)
                 drag = null
                 hoverSlot = null
                 folderTarget = null
+                overCancel = false
                 val app = (d.item as? AppItem)?.app ?: return null
+                if (cancel) return null
                 val target = hv
-                    ?: computeTarget(d.pointer, latestSettings, gridBounds.value, dockBounds.value, latestPage, latestDockCount)
-                return app to target
+                    ?: computeTarget(p, latestSettings, gridBounds.value, dockBounds.value, latestPage, latestDockCount)
+                return target?.let { ExternalDragResult.Place(app, it) }
             }
         }
     }
@@ -272,9 +297,10 @@ fun HomeScreen(
     }
     LaunchedEffect(drawerDrag.release) {
         if (drawerDrag.release > 0) {
-            val dropped = controller.endExternal()
-            val target = dropped?.second
-            if (dropped != null && target != null) onExternalDrop(dropped.first, target)
+            when (val end = controller.endExternal()) {
+                is ExternalDragResult.Place -> onExternalDrop(end.app, end.slot)
+                null -> {}
+            }
             onExternalDragEnd()
         }
     }
@@ -391,6 +417,25 @@ fun HomeScreen(
                 onRemove = { pos -> menuSlot = null; onRemoveFromDock(pos) },
             )
             Spacer(Modifier.height(12.dp))
+            }
+        }
+
+        // Dropping on the X cancels a drag that started in the drawer.
+        if (drag?.from == EXTERNAL_SLOT) {
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(start = 28.dp, top = 4.dp),
+            ) {
+                DragPill(
+                    icon = Icons.Outlined.Close,
+                    contentDescription = "Cancel",
+                    highlighted = overCancel,
+                    onBounds = { coords ->
+                        cancelBounds.value = rootCoords.value?.localBoundingBoxOf(coords) ?: coords.boundsInRoot()
+                    },
+                )
             }
         }
 
@@ -533,7 +578,28 @@ private fun HomePage(
                             Modifier.weight(1f).fillMaxHeight(),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (dragging && pos !in widgetCells) {
+                            val placing = drag?.from == EXTERNAL_SLOT
+                            val item = pageApps[pos]
+                            if (placing && isHover) {
+                                Box(
+                                    Modifier
+                                        .matchParentSize()
+                                        .padding(8.dp)
+                                        .clip(RoundedCornerShape(22.dp))
+                                        .background(Color.White.copy(alpha = 0.42f)),
+                                )
+                            } else if (placing && item == null && pos !in widgetCells) {
+                                Box(
+                                    Modifier
+                                        .matchParentSize()
+                                        .padding(8.dp)
+                                        .border(
+                                            1.25.dp,
+                                            Color.White.copy(alpha = 0.7f),
+                                            RoundedCornerShape(22.dp),
+                                        ),
+                                )
+                            } else if (dragging && pos !in widgetCells) {
                                 Box(
                                     Modifier
                                         .matchParentSize()
@@ -550,7 +616,6 @@ private fun HomePage(
                                         ),
                                 )
                             }
-                            val item = pageApps[pos]
                             if (editing && !dragging && item == null && pos !in widgetCells) {
                                 Box(
                                     Modifier
@@ -1307,6 +1372,25 @@ private fun RenameDialog(initial: String, onConfirm: (String) -> Unit, onDismiss
             )
         },
     )
+}
+
+@Composable
+private fun DragPill(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    highlighted: Boolean,
+    onBounds: (LayoutCoordinates) -> Unit,
+) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = if (highlighted) 0.96f else 0.78f))
+            .onGloballyPositioned(onBounds)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = Color(0xFF1C1C1E), modifier = Modifier.size(22.dp))
+    }
 }
 
 @Composable

@@ -90,8 +90,10 @@ fun LauncherRoot(
         if (overlay != Overlay.NONE) overlay = Overlay.NONE else editing = false
     }
 
-    val blurWallpaper = overlay == Overlay.FINDER || overlay == Overlay.DRAWER || editing
-    val blurHome = overlay == Overlay.FINDER || overlay == Overlay.DRAWER
+    // A drag out of the drawer hides it; the home screen underneath must stay sharp.
+    val placing = drawerDrag.app != null
+    val blurWallpaper = !placing && (overlay == Overlay.FINDER || overlay == Overlay.DRAWER || editing)
+    val blurHome = !placing && (overlay == Overlay.FINDER || overlay == Overlay.DRAWER)
     WallpaperBlur(enabled = blurWallpaper)
 
     Box(modifier.fillMaxSize()) {
