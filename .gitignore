@@ -31,6 +31,7 @@ google-services.json
 
 # --- Android Studio / IntelliJ ---
 .idea/
+.cursor/
 *.iml
 *.ipr
 *.iws
