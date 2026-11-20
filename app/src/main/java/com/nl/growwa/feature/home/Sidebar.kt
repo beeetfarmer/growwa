@@ -62,6 +62,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private val PanelWidth = 88.dp
+private val EdgeGap = 20.dp
 private val HandleWidth = 48.dp
 private val HandleHeight = 120.dp
 private val Ink = Color(0xFF1C1C1E)
@@ -85,6 +86,7 @@ fun Sidebar(
     }
     val density = LocalDensity.current
     val hiddenPx = with(density) { (PanelWidth + 8.dp).toPx() }
+    val openPx = with(density) { -EdgeGap.toPx() }
     // Plain state, updated inside the gesture. An Animatable snap posted to a scope
     // was still at the closed position when the finger lifted, so the panel never opened.
     var offsetPx by remember { mutableFloatStateOf(hiddenPx) }
@@ -141,10 +143,10 @@ fun Sidebar(
                     detectHorizontalDragGestures(
                         onHorizontalDrag = { change, dx ->
                             change.consume()
-                            offsetPx = (offsetPx + dx).coerceIn(0f, hiddenPx)
+                            offsetPx = (offsetPx + dx).coerceIn(openPx, hiddenPx)
                         },
-                        onDragEnd = { settle(if (offsetPx < hiddenPx * 0.75f) 0f else hiddenPx) },
-                        onDragCancel = { settle(if (offsetPx < hiddenPx * 0.75f) 0f else hiddenPx) },
+                        onDragEnd = { settle(if (offsetPx < hiddenPx * 0.75f) openPx else hiddenPx) },
+                        onDragCancel = { settle(if (offsetPx < hiddenPx * 0.75f) openPx else hiddenPx) },
                     )
                 },
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -236,16 +238,16 @@ fun Sidebar(
                                         accY += dy
                                         if (abs(accX) > slop || abs(accY) > slop) {
                                             mode = if (abs(accX) >= abs(accY)) 1 else 2
-                                            if (mode == 1) offsetPx = (offsetPx + accX).coerceIn(0f, hiddenPx)
+                                            if (mode == 1) offsetPx = (offsetPx + accX).coerceIn(openPx, hiddenPx)
                                             else anchorPx = (anchorPx + accY / travel).coerceIn(0f, 1f)
                                         }
                                     } else when (mode) {
-                                        1 -> offsetPx = (offsetPx + dx).coerceIn(0f, hiddenPx)
+                                        1 -> offsetPx = (offsetPx + dx).coerceIn(openPx, hiddenPx)
                                         2 -> anchorPx = (anchorPx + dy / travel).coerceIn(0f, 1f)
                                     }
                                 }
                                 when (mode) {
-                                    1 -> settle(if (offsetPx < hiddenPx * 0.75f) 0f else hiddenPx)
+                                    1 -> settle(if (offsetPx < hiddenPx * 0.75f) openPx else hiddenPx)
                                     2 -> onAnchorChange(anchorPx)
                                 }
                             } finally {
