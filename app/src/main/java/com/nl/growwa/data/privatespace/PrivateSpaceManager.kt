@@ -86,6 +86,8 @@ class PrivateSpaceManager(context: Context) {
      */
     fun setLocked(locked: Boolean) {
         val user = privateUser() ?: return
+        // privateUser() is already null below API 35. The extra check is what lint can see.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         runCatching { userManager.requestQuietModeEnabled(locked, user) }
         refresh()
     }
