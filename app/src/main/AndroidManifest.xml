@@ -82,6 +82,8 @@
                 android:resource="@xml/world_clock_widget_info" />
         </receiver>
 
+        <!-- Exported so a host can open widget setup. -->
+        <!-- nosemgrep: java.android.security.exported_activity.exported_activity -->
         <activity
             android:name=".feature.widgets.WorldClockConfigActivity"
             android:exported="true"
