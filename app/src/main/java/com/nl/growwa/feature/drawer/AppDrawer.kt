@@ -1,5 +1,7 @@
 package com.nl.growwa.feature.drawer
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -12,13 +14,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.systemBars
@@ -32,6 +38,9 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LeadingIconTab
 import androidx.compose.material3.MaterialTheme
@@ -40,32 +49,42 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nl.growwa.core.model.AppInfo
+import com.nl.growwa.core.model.AppShortcut
 import com.nl.growwa.data.privatespace.PrivateSpaceState
 import com.nl.growwa.data.settings.DrawerSearch
 import com.nl.growwa.data.settings.LauncherSettings
 import com.nl.growwa.data.settings.PrivateSpacePosition
-import com.nl.growwa.feature.components.AppContextMenu
 import com.nl.growwa.feature.components.AppIconCell
-import com.nl.growwa.feature.components.AppMenuActions
 import com.nl.growwa.feature.components.SearchField
 
 private const val TAB_APPS = 0
@@ -91,6 +110,8 @@ fun AppDrawer(
     onDragStart: (AppInfo, Offset) -> Unit,
     onDragMove: (Offset) -> Unit,
     onDragEnd: () -> Unit,
+    loadShortcuts: (AppInfo) -> List<AppShortcut>,
+    onLaunchShortcut: (AppInfo, AppShortcut) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -144,10 +165,24 @@ fun AppDrawer(
     }
 
     val gridState = rememberLazyGridState()
+    var openMenu by remember { mutableStateOf<OpenMenu?>(null) }
+    var shortcuts by remember { mutableStateOf<List<AppShortcut>>(emptyList()) }
+    LaunchedEffect(openMenu?.app?.key) {
+        val app = openMenu?.app
+        shortcuts = if (app == null) emptyList() else withContext(Dispatchers.IO) { loadShortcuts(app) }
+    }
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.isScrollInProgress }.collect { if (it) openMenu = null }
+    }
+    BackHandler(enabled = openMenu != null) { openMenu = null }
 
+    Box(modifier.fillMaxSize()) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
+            .then(
+                if (openMenu != null) Modifier.blur(18.dp, BlurredEdgeTreatment.Unbounded) else Modifier,
+            )
             .background(
                 MaterialTheme.colorScheme.surface.copy(
                     alpha = ((1f - settings.drawerTransparency) * 0.42f).coerceIn(0f, 0.55f),
@@ -217,28 +252,49 @@ fun AppDrawer(
                                 DrawerSuggestions(
                                     apps = suggestions,
                                     columns = settings.drawerColumns,
-                                    iconSize = settings.iconSizeDp.dp,
-                                    labelSize = settings.labelSizeSp.sp,
-                                    showLabels = settings.showDrawerLabels,
+                                    settings = settings,
                                     onLaunch = onLaunch,
+                                    onDragStart = { app, p -> openMenu = null; onDragStart(app, p) },
+                                    onDragMove = onDragMove,
+                                    onDragEnd = onDragEnd,
+                                    onShowMenu = { app, bounds, color -> openMenu = OpenMenu(app, bounds, color) },
+                                    onHideMenu = { openMenu = null },
                                 )
                             }
                         }
                         else -> null
                     },
                     onLaunch = onLaunch,
-                    onUninstall = onUninstall,
-                    onAddToDock = onAddToDock,
-                    onAppInfo = onAppInfo,
-                    onDragStart = onDragStart,
+                    onDragStart = { app, p -> openMenu = null; onDragStart(app, p) },
                     onDragMove = onDragMove,
                     onDragEnd = onDragEnd,
+                    onShowMenu = { app, bounds, color -> openMenu = OpenMenu(app, bounds, color) },
+                    onHideMenu = { openMenu = null },
                 )
             }
         }
 
         if (settings.drawerSearch == DrawerSearch.BOTTOM) searchBar()
         if (showTabs && settings.privateSpacePosition == PrivateSpacePosition.BOTTOM) tabs()
+    }
+        openMenu?.let { menu ->
+            DrawerMenuOverlay(
+                menu = menu,
+                shortcuts = shortcuts,
+                iconSize = settings.iconSizeDp.dp,
+                labelSize = settings.labelSizeSp.sp,
+                showLabel = settings.showDrawerLabels,
+                labelColor = menu.labelColor,
+                onDismiss = { openMenu = null },
+                onUninstall = { openMenu = null; onUninstall(menu.app) },
+                onAppInfo = { openMenu = null; onAppInfo(menu.app) },
+                onAddToDock = { openMenu = null; onAddToDock(menu.app) },
+                onShortcut = { shortcut ->
+                    openMenu = null
+                    onLaunchShortcut(menu.app, shortcut)
+                },
+            )
+        }
     }
 }
 
@@ -249,10 +305,13 @@ private val DrawerInk = Color.White
 private fun DrawerSuggestions(
     apps: List<AppInfo>,
     columns: Int,
-    iconSize: androidx.compose.ui.unit.Dp,
-    labelSize: androidx.compose.ui.unit.TextUnit,
-    showLabels: Boolean,
+    settings: LauncherSettings,
     onLaunch: (AppInfo) -> Unit,
+    onDragStart: (AppInfo, Offset) -> Unit,
+    onDragMove: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onShowMenu: (AppInfo, Rect, Color) -> Unit,
+    onHideMenu: () -> Unit,
 ) {
     var open by remember { mutableStateOf(true) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -280,15 +339,9 @@ private fun DrawerSuggestions(
                 Row(Modifier.fillMaxWidth()) {
                     rowApps.forEach { app ->
                         Box(Modifier.weight(1f)) {
-                            AppIconCell(
-                                icon = app.icon,
-                                label = app.label,
-                                iconSize = iconSize,
-                                labelSize = labelSize,
-                                showLabel = showLabels,
-                                onClick = { onLaunch(app) },
-                                modifier = Modifier.fillMaxWidth(),
-                                labelColor = DrawerInk,
+                            DrawerCell(
+                                app, settings, DrawerInk, onLaunch,
+                                onDragStart, onDragMove, onDragEnd, onShowMenu, onHideMenu,
                             )
                         }
                     }
@@ -313,12 +366,11 @@ private fun AppGrid(
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     header: (@Composable () -> Unit)?,
     onLaunch: (AppInfo) -> Unit,
-    onUninstall: (AppInfo) -> Unit,
-    onAddToDock: (AppInfo) -> Unit,
-    onAppInfo: (AppInfo) -> Unit,
     onDragStart: (AppInfo, Offset) -> Unit,
     onDragMove: (Offset) -> Unit,
     onDragEnd: () -> Unit,
+    onShowMenu: (AppInfo, Rect, Color) -> Unit,
+    onHideMenu: () -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
@@ -334,8 +386,8 @@ private fun AppGrid(
         }
         items(apps, key = { it.key.toString() }) { app ->
             DrawerCell(
-                app, settings, onLaunch, onUninstall, onAddToDock, onAppInfo,
-                onDragStart, onDragMove, onDragEnd,
+                app, settings, MaterialTheme.colorScheme.onSurface, onLaunch,
+                onDragStart, onDragMove, onDragEnd, onShowMenu, onHideMenu,
             )
         }
     }
@@ -393,15 +445,14 @@ private fun PrivateUnlockedHeader(onLock: () -> Unit) {
 private fun DrawerCell(
     app: AppInfo,
     settings: LauncherSettings,
+    labelColor: Color,
     onLaunch: (AppInfo) -> Unit,
-    onUninstall: (AppInfo) -> Unit,
-    onAddToDock: (AppInfo) -> Unit,
-    onAppInfo: (AppInfo) -> Unit,
     onDragStart: (AppInfo, Offset) -> Unit,
     onDragMove: (Offset) -> Unit,
     onDragEnd: () -> Unit,
+    onShowMenu: (AppInfo, Rect, Color) -> Unit,
+    onHideMenu: () -> Unit,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     Box(
         Modifier
@@ -422,12 +473,11 @@ private fun DrawerCell(
                     }
                     when {
                         longPressed -> {
-                            // Held ~0.5s: reveal the context menu.
-                            menuOpen = true
+                            coords?.boundsInWindow()?.let { onShowMenu(app, it, labelColor) }
                             // If the finger then drags, pick the app up to place on home/dock.
                             val slop = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
                             if (slop != null) {
-                                menuOpen = false
+                                onHideMenu()
                                 coords?.let { onDragStart(app, it.localToWindow(slop.position)) }
                                 drag(down.id) { change ->
                                     coords?.let { onDragMove(it.localToWindow(change.position)) }
@@ -451,17 +501,122 @@ private fun DrawerCell(
             onClick = null,
             onLongClick = null,
             modifier = Modifier.fillMaxWidth(),
-            labelColor = MaterialTheme.colorScheme.onSurface,
+            labelColor = labelColor,
         )
-        AppContextMenu(
-            expanded = menuOpen,
-            actions = AppMenuActions(
-                onOpen = { onLaunch(app) },
-                onAddToDock = { onAddToDock(app) },
-                onAppInfo = { onAppInfo(app) },
-                onUninstall = { onUninstall(app) },
+    }
+}
+
+private data class OpenMenu(val app: AppInfo, val bounds: Rect, val labelColor: Color)
+
+private val MenuInk = Color(0xFF1C1C1E)
+
+@Composable
+private fun DrawerMenuOverlay(
+    menu: OpenMenu,
+    shortcuts: List<AppShortcut>,
+    iconSize: androidx.compose.ui.unit.Dp,
+    labelSize: androidx.compose.ui.unit.TextUnit,
+    showLabel: Boolean,
+    labelColor: Color,
+    onDismiss: () -> Unit,
+    onUninstall: () -> Unit,
+    onAppInfo: () -> Unit,
+    onAddToDock: () -> Unit,
+    onShortcut: (AppShortcut) -> Unit,
+) {
+    var layer by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var cardHeight by remember { mutableStateOf(0) }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { layer = it }
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss,
             ),
-            onDismiss = { menuOpen = false },
+    ) {
+        val coords = layer ?: return@Box
+        val origin = coords.windowToLocal(menu.bounds.topLeft)
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val cardWidth = 248.dp
+        val cardWidthPx = with(density) { cardWidth.toPx() }
+        val gap = with(density) { 8.dp.toPx() }
+        val margin = with(density) { 12.dp.toPx() }
+        val x = (origin.x + menu.bounds.width / 2f - cardWidthPx / 2f)
+            .coerceIn(margin, (coords.size.width - cardWidthPx - margin).coerceAtLeast(margin))
+        val above = origin.y - cardHeight - gap
+        val y = if (cardHeight > 0 && above >= margin) above else origin.y + menu.bounds.height + gap
+        AppIconCell(
+            icon = menu.app.icon,
+            label = menu.app.label,
+            iconSize = iconSize,
+            labelSize = labelSize,
+            showLabel = showLabel,
+            modifier = Modifier
+                .offset { androidx.compose.ui.unit.IntOffset(origin.x.roundToInt(), origin.y.roundToInt()) }
+                .width(with(density) { menu.bounds.width.toDp() }),
+            labelColor = labelColor,
         )
+        Column(
+            Modifier
+                .offset { androidx.compose.ui.unit.IntOffset(x.roundToInt(), y.roundToInt()) }
+                .width(cardWidth)
+                .onGloballyPositioned { cardHeight = it.size.height }
+                .alpha(if (cardHeight == 0) 0f else 1f)
+                .clip(RoundedCornerShape(22.dp))
+                .background(Color.White.copy(alpha = 0.94f))
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                ),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().height(54.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MenuAction(Icons.Outlined.Delete, "Uninstall", onUninstall)
+                Box(Modifier.width(1.dp).height(22.dp).background(Color.Black.copy(alpha = 0.12f)))
+                MenuAction(Icons.Outlined.Info, "App info", onAppInfo)
+                Box(Modifier.width(1.dp).height(22.dp).background(Color.Black.copy(alpha = 0.12f)))
+                MenuAction(Icons.Outlined.OpenInNew, "Add to dock", onAddToDock)
+            }
+            shortcuts.forEach { shortcut ->
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.Black.copy(alpha = 0.08f)))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onShortcut(shortcut) }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (shortcut.icon != null) {
+                        Image(shortcut.icon, contentDescription = null, modifier = Modifier.size(22.dp))
+                    } else {
+                        Icon(Icons.Default.Apps, contentDescription = null, tint = MenuInk, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(shortcut.label, color = MenuInk, fontSize = 16.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.MenuAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = label, tint = MenuInk, modifier = Modifier.size(22.dp))
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nl.growwa.core.di.AppContainer
 import com.nl.growwa.core.model.AppInfo
+import com.nl.growwa.core.model.AppShortcut
 import com.nl.growwa.core.model.AppItem
 import com.nl.growwa.core.model.Container
 import com.nl.growwa.core.model.ContactInfo
@@ -186,6 +187,13 @@ class LauncherViewModel(
     fun openAppInfo(app: AppInfo) = appRepository.openAppInfo(app)
 
     fun uninstall(app: AppInfo) = appRepository.uninstall(app)
+
+    fun appShortcuts(app: AppInfo) = appRepository.shortcuts(app)
+
+    fun launchShortcut(app: AppInfo, shortcut: AppShortcut) {
+        appRepository.launchShortcut(app, shortcut)
+        viewModelScope.launch { usageRepository.recordLaunch(app) }
+    }
 
     // --- Private Space ---
     fun lockPrivateSpace() = privateSpaceManager.setLocked(true)
