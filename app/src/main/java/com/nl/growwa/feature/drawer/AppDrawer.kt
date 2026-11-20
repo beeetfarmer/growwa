@@ -143,7 +143,11 @@ fun AppDrawer(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 1f - settings.drawerTransparency))
+            .background(
+                MaterialTheme.colorScheme.surface.copy(
+                    alpha = ((1f - settings.drawerTransparency) * 0.42f).coerceIn(0f, 0.55f),
+                ),
+            )
             .windowInsetsPadding(WindowInsets.systemBars)
             .imePadding(),
     ) {
