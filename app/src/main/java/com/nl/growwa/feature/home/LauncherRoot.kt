@@ -90,8 +90,9 @@ fun LauncherRoot(
         if (overlay != Overlay.NONE) overlay = Overlay.NONE else editing = false
     }
 
-    val finderOpen = overlay == Overlay.FINDER
-    WallpaperBlur(enabled = finderOpen)
+    val blurWallpaper = overlay == Overlay.FINDER || overlay == Overlay.DRAWER || editing
+    val blurHome = overlay == Overlay.FINDER || overlay == Overlay.DRAWER
+    WallpaperBlur(enabled = blurWallpaper)
 
     Box(modifier.fillMaxSize()) {
         // Home surface with swipe-up (drawer) / swipe-down (finder) detection.
@@ -99,7 +100,7 @@ fun LauncherRoot(
             Modifier
                 .fillMaxSize()
                 .then(
-                    if (finderOpen) Modifier.blur(28.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+                    if (blurHome) Modifier.blur(28.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
                     else Modifier,
                 )
                 .pointerInput(Unit) {
