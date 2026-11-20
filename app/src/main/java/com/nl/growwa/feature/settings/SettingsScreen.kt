@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,6 +64,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -86,6 +89,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nl.growwa.core.model.AppInfo
 import com.nl.growwa.core.model.IconPackInfo
 import com.nl.growwa.data.settings.AccentColor
 import com.nl.growwa.data.settings.DrawerSearch
@@ -93,6 +97,7 @@ import com.nl.growwa.data.settings.GestureAction
 import com.nl.growwa.data.settings.LauncherSettings
 import com.nl.growwa.data.settings.PrivateSpacePosition
 import com.nl.growwa.data.settings.ThemeMode
+import com.nl.growwa.data.settings.sidebarToken
 import com.nl.growwa.feature.gestures.GrowwaAccessibilityService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -102,6 +107,7 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(
     settings: LauncherSettings,
+    apps: List<AppInfo>,
     onUpdate: ((LauncherSettings) -> LauncherSettings) -> Unit,
     loadIconPacks: suspend () -> List<IconPackInfo>,
     privateSpaceAvailable: Boolean,
@@ -201,6 +207,10 @@ fun SettingsScreen(
                 ) { v -> onUpdate { it.copy(suggestionCount = v) } }
             }
 
+            SettingsGroup("Sidebar") {
+                SidebarApps(settings, apps, onUpdate)
+            }
+
             SettingsGroup("File search") {
                 FileAccessRow()
                 Divider()
@@ -271,6 +281,109 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(32.dp))
         }
+    }
+}
+
+@Composable
+private fun SidebarApps(
+    settings: LauncherSettings,
+    apps: List<AppInfo>,
+    onUpdate: ((LauncherSettings) -> LauncherSettings) -> Unit,
+) {
+    var picking by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val byToken = remember(apps) { apps.associateBy { sidebarToken(it.key) } }
+    val pinned = settings.sidebarApps.mapNotNull { byToken[it] }
+    pinned.forEach { app ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(
+                app.icon,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(app.label, modifier = Modifier.weight(1f), fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            FilledTonalIconButton(
+                onClick = {
+                    val token = sidebarToken(app.key)
+                    onUpdate { it.copy(sidebarApps = it.sidebarApps.filterNot { id -> id == token }) }
+                },
+            ) { Icon(Icons.Default.Remove, contentDescription = "Remove") }
+        }
+    }
+    if (pinned.size < LauncherSettings.MAX_SIDEBAR) {
+        if (pinned.isNotEmpty()) Divider()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable {
+                    query = ""
+                    picking = true
+                }
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RowIcon(Icons.Default.Add)
+            Text("Add app", fontSize = 16.sp)
+        }
+    }
+    if (picking) {
+        val taken = settings.sidebarApps.toSet()
+        val choices = apps
+            .filter { sidebarToken(it.key) !in taken && it.label.contains(query, ignoreCase = true) }
+            .sortedBy { it.label.lowercase() }
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("Add to sidebar") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("Search") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LazyColumn(Modifier.height(360.dp)) {
+                        items(choices, key = { sidebarToken(it.key) }) { app ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onUpdate {
+                                            it.copy(sidebarApps = it.sidebarApps + sidebarToken(app.key))
+                                        }
+                                        picking = false
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Image(
+                                    app.icon,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(app.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { picking = false }) { Text("Close") }
+            },
+        )
     }
 }
 

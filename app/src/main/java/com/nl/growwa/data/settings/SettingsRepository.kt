@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.nl.growwa.core.model.AppKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -69,6 +70,9 @@ data class LauncherSettings(
     val recentSearches: List<String> = emptyList(),
     val suggestionCount: Int = 5,
     val dockCornerDp: Float = 28f,
+    val sidebarApps: List<String> = emptyList(),
+    /** 0–1 along the handle's travel, top to bottom. */
+    val sidebarAnchor: Float = 0.34f,
 ) {
     companion object {
         const val MAX_DOCK = 7
@@ -84,8 +88,12 @@ data class LauncherSettings(
         const val MAX_SUGGESTIONS = 10
         const val MIN_DOCK_CORNER_DP = 12f
         const val MAX_DOCK_CORNER_DP = 40f
+        const val MAX_SIDEBAR = 8
     }
 }
+
+/** Stable id for an app pinned to the home sidebar. */
+fun sidebarToken(key: AppKey) = "${key.packageName}\t${key.className}\t${key.userSerial}"
 
 class SettingsRepository(private val context: Context) {
 
@@ -113,6 +121,8 @@ class SettingsRepository(private val context: Context) {
         val recentSearches = stringPreferencesKey("recent_searches")
         val suggestionCount = intPreferencesKey("suggestion_count")
         val dockCornerDp = floatPreferencesKey("dock_corner_dp")
+        val sidebarApps = stringPreferencesKey("sidebar_apps")
+        val sidebarAnchor = floatPreferencesKey("sidebar_anchor")
     }
 
     private fun read(p: Preferences): LauncherSettings {
@@ -153,6 +163,8 @@ class SettingsRepository(private val context: Context) {
                 .coerceIn(LauncherSettings.MIN_SUGGESTIONS, LauncherSettings.MAX_SUGGESTIONS),
             dockCornerDp = (p[Keys.dockCornerDp] ?: d.dockCornerDp)
                 .coerceIn(LauncherSettings.MIN_DOCK_CORNER_DP, LauncherSettings.MAX_DOCK_CORNER_DP),
+            sidebarApps = decodeSidebar(p[Keys.sidebarApps]),
+            sidebarAnchor = (p[Keys.sidebarAnchor] ?: d.sidebarAnchor).coerceIn(0f, 1f),
         )
     }
 
@@ -184,9 +196,19 @@ class SettingsRepository(private val context: Context) {
             p[Keys.recentSearches] = next.recentSearches.take(8).joinToString("\n")
             p[Keys.suggestionCount] = next.suggestionCount
             p[Keys.dockCornerDp] = next.dockCornerDp
+            p[Keys.sidebarApps] = next.sidebarApps
+                .distinct()
+                .take(LauncherSettings.MAX_SIDEBAR)
+                .joinToString("\n")
+            p[Keys.sidebarAnchor] = next.sidebarAnchor.coerceIn(0f, 1f)
         }
     }
 }
+
+private fun decodeSidebar(raw: String?): List<String> =
+    raw?.lineSequence()?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct()
+        ?.take(LauncherSettings.MAX_SIDEBAR)?.toList()
+        ?: emptyList()
 
 private fun decodeSearches(raw: String?): List<String> =
     raw?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct()?.take(8)
