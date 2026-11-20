@@ -65,7 +65,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -977,7 +976,8 @@ private fun Dock(
         label = "dockGap",
     )
     val vPad by animateDpAsState(if (count <= 4) 14.dp else 10.dp, label = "dockPad")
-    val shape = RoundedCornerShape(36.dp)
+    val corner by animateDpAsState(settings.dockCornerDp.dp, label = "dockCorner")
+    val shape = RoundedCornerShape(corner)
 
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         if (count == 0) {
@@ -986,7 +986,6 @@ private fun Dock(
                 Modifier
                     .padding(bottom = 4.dp)
                     .size(width = 196.dp, height = 76.dp)
-                    .shadow(12.dp, shape)
                     .clip(shape)
                     .background(Color.White.copy(alpha = 0.22f))
                     .border(1.dp, Color.White.copy(alpha = 0.38f), shape)
@@ -994,11 +993,10 @@ private fun Dock(
             )
             return@Box
         }
-        // Frosted floating tray: light glass, hairline edge, soft shadow.
+        // Frosted tray. No elevation shadow: it shows through the translucent fill as a bar behind the icons.
         Row(
             modifier = Modifier
                 .padding(bottom = 4.dp)
-                .shadow(12.dp, shape)
                 .clip(shape)
                 .background(Color.White.copy(alpha = 0.22f))
                 .border(1.dp, Color.White.copy(alpha = 0.38f), shape)

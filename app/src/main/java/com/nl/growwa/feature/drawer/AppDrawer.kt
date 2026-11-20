@@ -1,6 +1,7 @@
 package com.nl.growwa.feature.drawer
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
@@ -27,6 +28,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.Icon
@@ -45,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
@@ -62,7 +66,6 @@ import com.nl.growwa.data.settings.PrivateSpacePosition
 import com.nl.growwa.feature.components.AppContextMenu
 import com.nl.growwa.feature.components.AppIconCell
 import com.nl.growwa.feature.components.AppMenuActions
-import com.nl.growwa.feature.components.AppSuggestionsCard
 import com.nl.growwa.feature.components.SearchField
 
 private const val TAB_APPS = 0
@@ -211,11 +214,13 @@ fun AppDrawer(
                         }
                         q.isBlank() && suggestions.isNotEmpty() -> {
                             {
-                                AppSuggestionsCard(
+                                DrawerSuggestions(
                                     apps = suggestions,
-                                    onLaunch = onLaunch,
                                     columns = settings.drawerColumns,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                                    iconSize = settings.iconSizeDp.dp,
+                                    labelSize = settings.labelSizeSp.sp,
+                                    showLabels = settings.showDrawerLabels,
+                                    onLaunch = onLaunch,
                                 )
                             }
                         }
@@ -234,6 +239,69 @@ fun AppDrawer(
 
         if (settings.drawerSearch == DrawerSearch.BOTTOM) searchBar()
         if (showTabs && settings.privateSpacePosition == PrivateSpacePosition.BOTTOM) tabs()
+    }
+}
+
+private val DrawerInk = Color.White
+
+/** Suggestions sit on the wallpaper: a plain header, then the icons, then "All apps". */
+@Composable
+private fun DrawerSuggestions(
+    apps: List<AppInfo>,
+    columns: Int,
+    iconSize: androidx.compose.ui.unit.Dp,
+    labelSize: androidx.compose.ui.unit.TextUnit,
+    showLabels: Boolean,
+    onLaunch: (AppInfo) -> Unit,
+) {
+    var open by remember { mutableStateOf(true) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "App suggestions",
+                color = DrawerInk.copy(alpha = 0.92f),
+                fontSize = 15.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (open) "Collapse" else "Expand",
+                tint = DrawerInk.copy(alpha = 0.7f),
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable { open = !open },
+            )
+        }
+        if (open) {
+            apps.chunked(columns).forEach { rowApps ->
+                Row(Modifier.fillMaxWidth()) {
+                    rowApps.forEach { app ->
+                        Box(Modifier.weight(1f)) {
+                            AppIconCell(
+                                icon = app.icon,
+                                label = app.label,
+                                iconSize = iconSize,
+                                labelSize = labelSize,
+                                showLabel = showLabels,
+                                onClick = { onLaunch(app) },
+                                modifier = Modifier.fillMaxWidth(),
+                                labelColor = DrawerInk,
+                            )
+                        }
+                    }
+                    repeat(columns - rowApps.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+        Text(
+            "All apps",
+            color = DrawerInk.copy(alpha = 0.92f),
+            fontSize = 15.sp,
+            modifier = Modifier.padding(start = 8.dp, top = 14.dp, bottom = 4.dp),
+        )
     }
 }
 

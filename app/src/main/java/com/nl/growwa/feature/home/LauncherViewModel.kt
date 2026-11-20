@@ -92,7 +92,11 @@ class LauncherViewModel(
             settings = settings,
             allApps = apps,
             layout = resolve(apps, layout.first, layout.second),
-            topApps = usageRepository.topApps(usage, apps.filter { !it.isPrivate }, limit = FINDER_TOP_COUNT),
+            topApps = usageRepository.topApps(
+                usage,
+                apps.filter { !it.isPrivate },
+                limit = settings.suggestionCount,
+            ),
             privateSpace = privateSpace,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LauncherUiState())
@@ -384,7 +388,6 @@ class LauncherViewModel(
     }
 
     companion object {
-        const val FINDER_TOP_COUNT = 10
         const val DOCK_MAX = 6
     }
 }
