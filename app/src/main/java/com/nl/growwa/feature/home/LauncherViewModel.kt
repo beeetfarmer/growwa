@@ -361,6 +361,10 @@ class LauncherViewModel(
         layoutRepository.removeSlot(Container.DOCK, 0, position)
     }
 
+    fun reorderHomePage(from: Int, to: Int) = viewModelScope.launch {
+        layoutRepository.reorderHomePage(from, to)
+    }
+
     class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

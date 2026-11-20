@@ -11,15 +11,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Wallpaper
-import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,18 +19,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import android.content.Intent
 import android.provider.Settings
 import com.nl.growwa.data.settings.GestureAction
@@ -59,7 +50,7 @@ fun LauncherRoot(
 ) {
     val ui by viewModel.uiState.collectAsState()
     var overlay by remember { mutableStateOf(Overlay.NONE) }
-    var homeMenu by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
     // Live state for an app being dragged out of the drawer onto home/dock.
     val drawerDrag = remember { DrawerDragState() }
 
@@ -67,13 +58,12 @@ fun LauncherRoot(
     androidx.compose.runtime.LaunchedEffect(resetSignal) {
         if (resetSignal > 0) {
             overlay = Overlay.NONE
-            homeMenu = false
+            editing = false
         }
     }
-    var menuOffset by remember { mutableStateOf(Offset.Zero) }
     var showA11yPrompt by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
 
     val homePager = rememberPagerState(
         pageCount = { ui.layout.pageCount.coerceAtLeast(1) },
@@ -95,7 +85,10 @@ fun LauncherRoot(
         }
     }
 
-    BackHandler(enabled = overlay != Overlay.NONE) { overlay = Overlay.NONE }
+    val editingNow by rememberUpdatedState(editing)
+    BackHandler(enabled = overlay != Overlay.NONE || editing) {
+        if (overlay != Overlay.NONE) overlay = Overlay.NONE else editing = false
+    }
 
     val finderOpen = overlay == Overlay.FINDER
     WallpaperBlur(enabled = finderOpen)
@@ -114,6 +107,7 @@ fun LauncherRoot(
                     detectVerticalDragGestures(
                         onDragStart = { total = 0f },
                         onDragEnd = {
+                            if (editingNow) return@detectVerticalDragGestures
                             when {
                                 total < -SWIPE_THRESHOLD -> performGesture(currentSettings.gestureSwipeUp)
                                 total > SWIPE_THRESHOLD -> performGesture(currentSettings.gestureSwipeDown)
@@ -124,11 +118,10 @@ fun LauncherRoot(
                 }
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onLongPress = { offset ->
-                            menuOffset = offset
-                            homeMenu = true
+                        onLongPress = { editing = true },
+                        onDoubleTap = {
+                            if (!editingNow) performGesture(currentSettings.gestureDoubleTap)
                         },
-                        onDoubleTap = { performGesture(currentSettings.gestureDoubleTap) },
                     )
                 },
         ) {
@@ -155,43 +148,40 @@ fun LauncherRoot(
                     drawerDrag.release = 0
                     overlay = Overlay.NONE
                 },
+                editing = editing,
             )
+        }
 
-            // Long-press-on-home popup.
-            DropdownMenu(
-                expanded = homeMenu,
-                onDismissRequest = { homeMenu = false },
-                offset = with(density) { DpOffset(menuOffset.x.toDp(), menuOffset.y.toDp()) },
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Create folder") },
-                    leadingIcon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null) },
-                    onClick = { homeMenu = false; viewModel.createFolder(homePager.currentPage) },
-                )
-                DropdownMenuItem(
-                    text = { Text("Widgets") },
-                    leadingIcon = { Icon(Icons.Default.Widgets, contentDescription = null) },
-                    onClick = { homeMenu = false; overlay = Overlay.WIDGETS },
-                )
-                DropdownMenuItem(
-                    text = { Text("Launcher settings") },
-                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    onClick = { homeMenu = false; overlay = Overlay.SETTINGS },
-                )
-                DropdownMenuItem(
-                    text = { Text("Wallpaper") },
-                    leadingIcon = { Icon(Icons.Default.Wallpaper, contentDescription = null) },
-                    onClick = {
-                        homeMenu = false
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_SET_WALLPAPER)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            )
-                        }
-                    },
-                )
-            }
+        if (editing && overlay == Overlay.NONE) {
+            HomeEditChrome(
+                pageCount = ui.layout.pageCount.coerceAtLeast(1),
+                currentPage = homePager.currentPage,
+                layout = ui.layout,
+                columns = ui.settings.homeColumns,
+                rows = ui.settings.homeRows,
+                onSelectPage = { page -> scope.launch { homePager.animateScrollToPage(page) } },
+                onReorderPages = { from, to ->
+                    val max = ui.layout.pageCount - 1
+                    if (from !in 0..max || to !in 0..max || from == to) return@HomeEditChrome
+                    val order = (0..max).toMutableList()
+                    val moved = order.removeAt(from)
+                    order.add(to.coerceIn(0, order.size), moved)
+                    val stay = order.indexOf(homePager.currentPage).coerceAtLeast(0)
+                    viewModel.reorderHomePage(from, to)
+                    scope.launch { homePager.scrollToPage(stay) }
+                },
+                onWallpapers = {
+                    editing = false
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_SET_WALLPAPER).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                },
+                onSystemStyle = { editing = false; overlay = Overlay.SETTINGS },
+                onWidgets = { editing = false; overlay = Overlay.WIDGETS },
+                onSettings = { editing = false; overlay = Overlay.SETTINGS },
+            )
         }
 
         // App drawer (slides up from bottom).

@@ -91,6 +91,20 @@ interface PlacementDao {
 
     @Query("DELETE FROM placements WHERE kind = 'app' AND packageName = :packageName AND className = :className AND userSerial = :userSerial")
     suspend fun removeApp(packageName: String, className: String, userSerial: Long)
+
+    /** Move home page [from] to index [to], shifting the pages in between. Widgets move with the page. */
+    @Transaction
+    suspend fun reorderHomePages(from: Int, to: Int) {
+        val home = getAll().filter { it.container == "home" }
+        val max = home.maxOfOrNull { it.page } ?: return
+        if (from == to || from !in 0..max || to !in 0..max) return
+        val order = (0..max).toMutableList()
+        val moved = order.removeAt(from)
+        order.add(to.coerceIn(0, order.size), moved)
+        val remap = order.withIndex().associate { (newPage, oldPage) -> oldPage to newPage }
+        clearContainer("home")
+        upsertAll(home.map { it.copy(page = remap.getValue(it.page)) })
+    }
 }
 
 /** A home-screen folder; its apps live in placements with container = "folder_<id>". */
