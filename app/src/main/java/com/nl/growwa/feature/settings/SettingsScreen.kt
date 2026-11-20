@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tab
 import androidx.compose.material.icons.filled.TableRows
@@ -140,6 +141,14 @@ fun SettingsScreen(
                     Icons.Default.Apps, "Dock apps", settings.dockCount, 1, LauncherSettings.MAX_DOCK,
                 ) { v -> onUpdate { it.copy(dockCount = v) } }
                 Divider()
+                SliderRow(
+                    Icons.Default.RoundedCorner,
+                    "Dock corners",
+                    "${settings.dockCornerDp.roundToInt()} dp",
+                    settings.dockCornerDp,
+                    LauncherSettings.MIN_DOCK_CORNER_DP..LauncherSettings.MAX_DOCK_CORNER_DP,
+                ) { v -> onUpdate { it.copy(dockCornerDp = v) } }
+                Divider()
                 StepperRow(
                     Icons.Default.GridView, "Drawer columns", settings.drawerColumns,
                     LauncherSettings.MIN_COLUMNS, LauncherSettings.MAX_COLUMNS,
@@ -185,15 +194,11 @@ fun SettingsScreen(
                     "${(settings.drawerTransparency * 100).roundToInt()}%",
                     settings.drawerTransparency, 0f..1f,
                 ) { v -> onUpdate { it.copy(drawerTransparency = v) } }
-            }
-
-            SettingsGroup("Finder") {
-                SliderRow(
-                    Icons.Default.Opacity,
-                    "Background transparency",
-                    "${(settings.finderTransparency * 100).roundToInt()}%",
-                    settings.finderTransparency, 0f..1f,
-                ) { v -> onUpdate { it.copy(finderTransparency = v) } }
+                Divider()
+                StepperRow(
+                    Icons.Default.Apps, "App suggestions", settings.suggestionCount,
+                    LauncherSettings.MIN_SUGGESTIONS, LauncherSettings.MAX_SUGGESTIONS,
+                ) { v -> onUpdate { it.copy(suggestionCount = v) } }
             }
 
             SettingsGroup("File search") {

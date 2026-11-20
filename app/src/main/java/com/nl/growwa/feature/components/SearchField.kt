@@ -12,7 +12,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -39,7 +39,7 @@ fun SearchField(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
 ) {
-    val onSurface = MaterialTheme.colorScheme.onSurface
+    val ink = Color(0xFF1C1C1E)
     // Always have a requester so tapping anywhere on the pill focuses the field and shows the keyboard.
     val requester = remember { FocusRequester() }
     val focus = focusRequester ?: requester
@@ -50,28 +50,28 @@ fun SearchField(
             keyboard?.show()
         },
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = Color.White.copy(alpha = 0.78f),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 Icons.Default.Search,
                 contentDescription = null,
-                tint = onSurface.copy(alpha = 0.7f),
-                modifier = Modifier.size(22.dp),
+                tint = ink.copy(alpha = 0.45f),
+                modifier = Modifier.size(20.dp),
             )
-            Box(Modifier.weight(1f).padding(start = 12.dp)) {
+            Box(Modifier.weight(1f).padding(start = 10.dp)) {
                 if (query.isEmpty()) {
-                    Text(hint, color = onSurface.copy(alpha = 0.6f), fontSize = 16.sp)
+                    Text(hint, color = ink.copy(alpha = 0.45f), fontSize = 16.sp)
                 }
                 BasicTextField(
                     value = query,
                     onValueChange = onQueryChange,
                     singleLine = true,
-                    textStyle = TextStyle(color = onSurface, fontSize = 16.sp),
-                    cursorBrush = SolidColor(onSurface),
+                    textStyle = TextStyle(color = ink, fontSize = 16.sp),
+                    cursorBrush = SolidColor(ink),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
             }
@@ -79,7 +79,7 @@ fun SearchField(
                 Icon(
                     Icons.Default.Close,
                     contentDescription = "Clear",
-                    tint = onSurface.copy(alpha = 0.7f),
+                    tint = ink.copy(alpha = 0.45f),
                     modifier = Modifier
                         .size(22.dp)
                         .clickable { onQueryChange("") },

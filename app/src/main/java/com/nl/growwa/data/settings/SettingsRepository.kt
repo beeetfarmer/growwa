@@ -58,7 +58,6 @@ data class LauncherSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val drawerSearch: DrawerSearch = DrawerSearch.TOP,
     val drawerTransparency: Float = 0f, // 0f = fully opaque, 1f = fully transparent
-    val finderTransparency: Float = 0f, // 0f = fully opaque, 1f = fully transparent
     val accent: AccentColor = AccentColor.BLUE,
     val iconPack: String = "", // package name of selected icon pack; "" = system default
     val gestureSwipeUp: GestureAction = GestureAction.APP_DRAWER,
@@ -68,6 +67,8 @@ data class LauncherSettings(
     val hidePrivateSpace: Boolean = false,
     val excludedSearchFolders: Set<String> = emptySet(), // absolute paths skipped by file search
     val recentSearches: List<String> = emptyList(),
+    val suggestionCount: Int = 5,
+    val dockCornerDp: Float = 28f,
 ) {
     companion object {
         const val MAX_DOCK = 7
@@ -79,6 +80,10 @@ data class LauncherSettings(
         const val MAX_ICON_DP = 72f
         const val MIN_LABEL_SP = 9f
         const val MAX_LABEL_SP = 16f
+        const val MIN_SUGGESTIONS = 1
+        const val MAX_SUGGESTIONS = 10
+        const val MIN_DOCK_CORNER_DP = 12f
+        const val MAX_DOCK_CORNER_DP = 40f
     }
 }
 
@@ -97,7 +102,6 @@ class SettingsRepository(private val context: Context) {
         val themeMode = intPreferencesKey("theme_mode")
         val drawerSearch = intPreferencesKey("drawer_search")
         val drawerTransparency = floatPreferencesKey("drawer_transparency")
-        val finderTransparency = floatPreferencesKey("finder_transparency")
         val accent = intPreferencesKey("accent")
         val iconPack = stringPreferencesKey("icon_pack")
         val gestureSwipeUp = intPreferencesKey("gesture_swipe_up")
@@ -107,6 +111,8 @@ class SettingsRepository(private val context: Context) {
         val hidePrivateSpace = booleanPreferencesKey("hide_private_space")
         val excludedSearchFolders = stringSetPreferencesKey("excluded_search_folders")
         val recentSearches = stringPreferencesKey("recent_searches")
+        val suggestionCount = intPreferencesKey("suggestion_count")
+        val dockCornerDp = floatPreferencesKey("dock_corner_dp")
     }
 
     private fun read(p: Preferences): LauncherSettings {
@@ -130,7 +136,6 @@ class SettingsRepository(private val context: Context) {
             themeMode = ThemeMode.entries.getOrElse(p[Keys.themeMode] ?: 0) { ThemeMode.SYSTEM },
             drawerSearch = DrawerSearch.entries.getOrElse(p[Keys.drawerSearch] ?: 1) { DrawerSearch.TOP },
             drawerTransparency = (p[Keys.drawerTransparency] ?: d.drawerTransparency).coerceIn(0f, 1f),
-            finderTransparency = (p[Keys.finderTransparency] ?: d.finderTransparency).coerceIn(0f, 1f),
             accent = AccentColor.entries.getOrElse(p[Keys.accent] ?: 0) { AccentColor.BLUE },
             iconPack = p[Keys.iconPack] ?: d.iconPack,
             gestureSwipeUp = GestureAction.entries
@@ -144,6 +149,10 @@ class SettingsRepository(private val context: Context) {
             hidePrivateSpace = p[Keys.hidePrivateSpace] ?: d.hidePrivateSpace,
             excludedSearchFolders = p[Keys.excludedSearchFolders] ?: d.excludedSearchFolders,
             recentSearches = decodeSearches(p[Keys.recentSearches]),
+            suggestionCount = (p[Keys.suggestionCount] ?: d.suggestionCount)
+                .coerceIn(LauncherSettings.MIN_SUGGESTIONS, LauncherSettings.MAX_SUGGESTIONS),
+            dockCornerDp = (p[Keys.dockCornerDp] ?: d.dockCornerDp)
+                .coerceIn(LauncherSettings.MIN_DOCK_CORNER_DP, LauncherSettings.MAX_DOCK_CORNER_DP),
         )
     }
 
@@ -164,7 +173,6 @@ class SettingsRepository(private val context: Context) {
             p[Keys.themeMode] = next.themeMode.ordinal
             p[Keys.drawerSearch] = next.drawerSearch.ordinal
             p[Keys.drawerTransparency] = next.drawerTransparency
-            p[Keys.finderTransparency] = next.finderTransparency
             p[Keys.accent] = next.accent.ordinal
             p[Keys.iconPack] = next.iconPack
             p[Keys.gestureSwipeUp] = next.gestureSwipeUp.ordinal
@@ -174,6 +182,8 @@ class SettingsRepository(private val context: Context) {
             p[Keys.hidePrivateSpace] = next.hidePrivateSpace
             p[Keys.excludedSearchFolders] = next.excludedSearchFolders
             p[Keys.recentSearches] = next.recentSearches.take(8).joinToString("\n")
+            p[Keys.suggestionCount] = next.suggestionCount
+            p[Keys.dockCornerDp] = next.dockCornerDp
         }
     }
 }

@@ -10,7 +10,6 @@ import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +20,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -41,6 +42,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -65,8 +68,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -99,7 +105,7 @@ fun FinderOverlay(
     onClearSearches: () -> Unit,
     onOpenSettings: () -> Unit,
     onDismiss: () -> Unit,
-    backgroundTransparency: Float = 0f,
+    suggestionCount: Int = 5,
 ) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
@@ -208,14 +214,9 @@ fun FinderOverlay(
         onDismiss()
     }
 
-    val scrim = ((1f - backgroundTransparency) * 0.2f).coerceIn(0f, 0.35f)
-    Box(
-        Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .imePadding(),
-    ) {
-        // Eat taps on the empty wallpaper so they don't launch icons underneath.
+    val scrim = 0.2f
+    Box(Modifier.fillMaxSize()) {
+        // Full-bleed so the status and navigation bars show the same blurred wallpaper.
         Box(
             Modifier
                 .fillMaxSize()
@@ -226,7 +227,13 @@ fun FinderOverlay(
                     onClick = {},
                 ),
         )
-        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars)
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
             FinderSearchBar(
                 query = query,
                 onQueryChange = { query = it },
@@ -245,11 +252,18 @@ fun FinderOverlay(
                     .verticalScroll(rememberScrollState())
                     .padding(top = 12.dp),
             ) {
-                val suggested = if (searching) appResults else topApps
-                if (suggested.isNotEmpty()) {
-                    AppSuggestionsCard(suggested.take(MAX_APPS), ::launchApp)
-                } else if (!searching) {
-                    EmptyHint("Your most-used apps will appear here")
+                if (!searching) {
+                    if (topApps.isNotEmpty()) {
+                        AppSuggestionsCard(topApps.take(suggestionCount), ::launchApp)
+                    } else {
+                        EmptyHint("Your most-used apps will appear here")
+                    }
+                } else if (appResults.isNotEmpty()) {
+                    CategoryBox("Apps") {
+                        LimitedRows(appResults) { app ->
+                            AppResultRow(app, query) { launchApp(app) }
+                        }
+                    }
                 }
 
                 if (searching && (!hasContacts || contactResults.isNotEmpty())) {
@@ -259,8 +273,8 @@ fun FinderOverlay(
                             permLauncher.launch(android.Manifest.permission.READ_CONTACTS)
                         }) { Text("Allow contacts access") }
                     } else {
-                        contactResults.take(MAX_OTHER).forEach { c ->
-                            ContactRow(c, onSurface) { openContact(c) }
+                        LimitedRows(contactResults) { c ->
+                            ContactRow(c, query, onSurface) { openContact(c) }
                         }
                     }
                 }
@@ -268,9 +282,16 @@ fun FinderOverlay(
 
             if (searching && settingResults.isNotEmpty()) {
                 CategoryBox("Settings") {
-                    settingResults.take(MAX_OTHER).forEach { s ->
-                        SettingRow(s, onSurface) { openSetting(s) }
+                    LimitedRows(settingResults) { s ->
+                        SettingRow(s, query, onSurface) { openSetting(s) }
                     }
+                    TextButton(onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    }) { Text("Search in settings") }
                 }
             }
 
@@ -286,8 +307,8 @@ fun FinderOverlay(
                 }
             } else if (searching && fileResults.isNotEmpty()) {
                 CategoryBox("Files") {
-                    fileResults.take(MAX_FILES).forEach { f ->
-                        FileRow(f, onSurface) { openFile(f) }
+                    LimitedRows(fileResults, preview = 4) { f ->
+                        FileRow(f, query, onSurface) { openFile(f) }
                     }
                 }
             }
@@ -316,32 +337,103 @@ fun FinderOverlay(
     }
 }
 
-private const val MAX_APPS = 10
-private const val MAX_OTHER = 6
-private const val MAX_FILES = 10
+private const val PREVIEW_ROWS = 3
+private val MatchBlue = Color(0xFF1A73E8)
 
-/** An outlined, titled container for one Finder result category. */
+/** Frosted result card: title, collapse chevron, rows. */
 @Composable
 private fun CategoryBox(title: String, content: @Composable ColumnScope.() -> Unit) {
+    var open by remember(title) { mutableStateOf(true) }
     Column(
         Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
-            .border(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant,
-                RoundedCornerShape(16.dp),
-            )
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color.White.copy(alpha = 0.88f))
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        Text(
-            text = title,
-            color = MaterialTheme.colorScheme.primary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                color = Ink,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f).padding(start = 4.dp),
+            )
+            Icon(
+                if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (open) "Collapse" else "Expand",
+                tint = Ink.copy(alpha = 0.55f),
+                modifier = Modifier
+                    .size(22.dp)
+                    .clickable { open = !open },
+            )
+        }
+        if (open) {
+            Spacer(Modifier.height(10.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+private fun <T> LimitedRows(
+    items: List<T>,
+    preview: Int = PREVIEW_ROWS,
+    row: @Composable (T) -> Unit,
+) {
+    var showAll by remember(items) { mutableStateOf(false) }
+    val shown = if (showAll) items else items.take(preview)
+    shown.forEach { row(it) }
+    if (items.size > preview) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Text(
+                if (showAll) "Show less" else "More",
+                color = MatchBlue,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .clickable { showAll = !showAll }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Highlighted(text: String, query: String, color: Color, fontSize: androidx.compose.ui.unit.TextUnit) {
+    val q = query.trim()
+    val start = if (q.isEmpty()) -1 else text.indexOf(q, ignoreCase = true)
+    val annotated = buildAnnotatedString {
+        if (start < 0) {
+            append(text)
+        } else {
+            append(text.substring(0, start))
+            withStyle(SpanStyle(color = MatchBlue, fontWeight = FontWeight.SemiBold)) {
+                append(text.substring(start, start + q.length))
+            }
+            append(text.substring(start + q.length))
+        }
+    }
+    Text(annotated, color = color, fontSize = fontSize, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+
+@Composable
+private fun AppResultRow(app: AppInfo, query: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(
+            bitmap = app.icon,
+            contentDescription = null,
+            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)),
         )
-        content()
+        Box(Modifier.padding(start = 14.dp).weight(1f)) {
+            Highlighted(app.label, query, Ink, 16.sp)
+        }
     }
 }
 
@@ -486,7 +578,7 @@ private fun FinderBarButton(
 }
 
 @Composable
-private fun ContactRow(contact: ContactInfo, textColor: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+private fun ContactRow(contact: ContactInfo, query: String, textColor: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -512,17 +604,14 @@ private fun ContactRow(contact: ContactInfo, textColor: androidx.compose.ui.grap
                 Icon(Icons.Default.Person, contentDescription = null, tint = textColor.copy(alpha = 0.7f))
             }
         }
-        Text(
-            contact.name,
-            color = textColor,
-            fontSize = 16.sp,
-            modifier = Modifier.padding(start = 14.dp),
-        )
+        Box(Modifier.padding(start = 14.dp).weight(1f)) {
+            Highlighted(contact.name, query, textColor, 16.sp)
+        }
     }
 }
 
 @Composable
-private fun FileRow(file: FileInfo, textColor: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+private fun FileRow(file: FileInfo, query: String, textColor: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -544,13 +633,7 @@ private fun FileRow(file: FileInfo, textColor: androidx.compose.ui.graphics.Colo
             )
         }
         Column(Modifier.padding(start = 14.dp)) {
-            Text(
-                file.name,
-                color = textColor,
-                fontSize = 16.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Highlighted(file.name, query, textColor, 16.sp)
             Text(
                 prettyPath(file.path),
                 color = textColor.copy(alpha = 0.6f),
@@ -571,7 +654,7 @@ private fun prettyPath(path: String): String {
 }
 
 @Composable
-private fun SettingRow(setting: SettingAction, textColor: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+private fun SettingRow(setting: SettingAction, query: String, textColor: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -588,11 +671,9 @@ private fun SettingRow(setting: SettingAction, textColor: androidx.compose.ui.gr
         ) {
             Icon(Icons.Default.Settings, contentDescription = null, tint = textColor.copy(alpha = 0.7f))
         }
-        Text(
-            setting.label,
-            color = textColor,
-            fontSize = 16.sp,
-            modifier = Modifier.padding(start = 14.dp),
-        )
+        Column(Modifier.padding(start = 14.dp).weight(1f)) {
+            Highlighted(setting.label, query, textColor, 16.sp)
+            Text("Settings", color = textColor.copy(alpha = 0.55f), fontSize = 12.sp)
+        }
     }
 }

@@ -203,7 +203,9 @@ fun LauncherRoot(
             ) {
                 AppDrawer(
                     apps = ui.mainApps,
-                    suggestions = ui.topApps.ifEmpty { ui.mainApps.take(10) },
+                    suggestions = ui.topApps.ifEmpty {
+                        ui.mainApps.take(ui.settings.suggestionCount)
+                    },
                     privateApps = ui.privateApps,
                     privateSpace = ui.privateSpace,
                     settings = ui.settings,
@@ -240,7 +242,7 @@ fun LauncherRoot(
                 onClearSearches = viewModel::clearFinderQueries,
                 onOpenSettings = { overlay = Overlay.SETTINGS },
                 onDismiss = { overlay = Overlay.NONE },
-                backgroundTransparency = ui.settings.finderTransparency,
+                suggestionCount = ui.settings.suggestionCount,
             )
         }
 
