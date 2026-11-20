@@ -62,6 +62,7 @@ import com.nl.growwa.data.settings.PrivateSpacePosition
 import com.nl.growwa.feature.components.AppContextMenu
 import com.nl.growwa.feature.components.AppIconCell
 import com.nl.growwa.feature.components.AppMenuActions
+import com.nl.growwa.feature.components.AppSuggestionsCard
 import com.nl.growwa.feature.components.SearchField
 
 private const val TAB_APPS = 0
@@ -74,6 +75,7 @@ private const val PULL_DISMISS = 180f
 @Composable
 fun AppDrawer(
     apps: List<AppInfo>,
+    suggestions: List<AppInfo>,
     privateApps: List<AppInfo>,
     privateSpace: PrivateSpaceState,
     settings: LauncherSettings,
@@ -203,9 +205,22 @@ fun AppDrawer(
                     columns = settings.drawerColumns,
                     settings = settings,
                     gridState = gridState,
-                    header = if (tab == TAB_PRIVATE) {
-                        { PrivateUnlockedHeader(onLock = onLockPrivate) }
-                    } else null,
+                    header = when {
+                        tab == TAB_PRIVATE -> {
+                            { PrivateUnlockedHeader(onLock = onLockPrivate) }
+                        }
+                        q.isBlank() && suggestions.isNotEmpty() -> {
+                            {
+                                AppSuggestionsCard(
+                                    apps = suggestions,
+                                    onLaunch = onLaunch,
+                                    columns = settings.drawerColumns,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                                )
+                            }
+                        }
+                        else -> null
+                    },
                     onLaunch = onLaunch,
                     onUninstall = onUninstall,
                     onAddToDock = onAddToDock,
