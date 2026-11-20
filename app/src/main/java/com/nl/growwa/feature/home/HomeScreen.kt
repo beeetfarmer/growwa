@@ -139,6 +139,7 @@ fun HomeScreen(
     pagerState: PagerState,
     settings: LauncherSettings,
     layout: ResolvedLayout,
+    apps: List<AppInfo>,
     onLaunch: (AppInfo) -> Unit,
     onAddToDock: (AppInfo) -> Unit,
     onAppInfo: (AppInfo) -> Unit,
@@ -154,6 +155,7 @@ fun HomeScreen(
     drawerDrag: DrawerDragState,
     onExternalDrop: (AppInfo, DropSlot) -> Unit,
     onExternalDragEnd: () -> Unit,
+    onSidebarAnchor: (Float) -> Unit,
     editing: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -418,6 +420,16 @@ fun HomeScreen(
             )
             Spacer(Modifier.height(12.dp))
             }
+        }
+
+        if (!editing && drag == null) {
+            Sidebar(
+                apps = apps,
+                tokens = settings.sidebarApps,
+                anchor = settings.sidebarAnchor,
+                onAnchorChange = onSidebarAnchor,
+                onLaunch = onLaunch,
+            )
         }
 
         // Dropping on the X cancels a drag that started in the drawer.

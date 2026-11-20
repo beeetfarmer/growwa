@@ -132,6 +132,7 @@ fun LauncherRoot(
                 pagerState = homePager,
                 settings = ui.settings,
                 layout = ui.layout,
+                apps = ui.mainApps,
                 onLaunch = viewModel::launch,
                 onAddToDock = viewModel::addToDock,
                 onAppInfo = viewModel::openAppInfo,
@@ -151,6 +152,7 @@ fun LauncherRoot(
                     drawerDrag.release = 0
                     overlay = Overlay.NONE
                 },
+                onSidebarAnchor = { v -> viewModel.updateSettings { it.copy(sidebarAnchor = v) } },
                 editing = editing,
             )
         }
@@ -261,6 +263,7 @@ fun LauncherRoot(
         ) {
             SettingsScreen(
                 settings = ui.settings,
+                apps = ui.mainApps,
                 onUpdate = viewModel::updateSettings,
                 loadIconPacks = viewModel::loadIconPacks,
                 privateSpaceAvailable = ui.privateSpace.available,
