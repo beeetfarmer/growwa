@@ -218,6 +218,11 @@ fun LauncherRoot(
                     onDragStart = { app, p -> drawerDrag.app = app; drawerDrag.pointer = p },
                     onDragMove = { drawerDrag.pointer = it },
                     onDragEnd = { drawerDrag.release++ },
+                    loadShortcuts = viewModel::appShortcuts,
+                    onLaunchShortcut = { app, shortcut ->
+                        viewModel.launchShortcut(app, shortcut)
+                        overlay = Overlay.NONE
+                    },
                     onDismiss = { overlay = Overlay.NONE },
                 )
             }

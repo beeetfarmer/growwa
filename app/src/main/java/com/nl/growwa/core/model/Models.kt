@@ -1,6 +1,7 @@
 package com.nl.growwa.core.model
 
 import android.content.ComponentName
+import android.content.Intent
 import android.os.UserHandle
 import androidx.compose.ui.graphics.ImageBitmap
 
@@ -25,6 +26,14 @@ data class AppInfo(
 ) {
     val packageName: String get() = key.packageName
 }
+
+/** A launcher shortcut published by an app (manifest, dynamic, or pinned). */
+data class AppShortcut(
+    val id: String,
+    val label: String,
+    val icon: ImageBitmap?,
+    val intent: Intent? = null,
+)
 
 /** Where an app is placed on the home surface. */
 enum class Container { HOME, DOCK }
