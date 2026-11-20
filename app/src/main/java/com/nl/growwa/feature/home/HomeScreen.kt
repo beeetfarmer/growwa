@@ -48,8 +48,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.OpenInFull
-import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +56,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -542,9 +541,10 @@ private fun HomePage(
 ) {
     val cols = settings.homeColumns
     val rows = settings.homeRows
-    var resize by remember { mutableStateOf<ResizeDraft?>(null) }
-    // Live position while a widget is being dragged to a new grid cell.
-    var widgetMove by remember { mutableStateOf<ResizeDraft?>(null) }
+    // One picked-up widget: drag the body to move it, drag the handles to resize.
+    var edit by remember { mutableStateOf<ResizeDraft?>(null) }
+    var dragOrigin by remember { mutableStateOf<ResizeDraft?>(null) }
+    var dragTotal by remember { mutableStateOf(Offset.Zero) }
     // Cells covered by a widget so we don't draw drag placeholders beneath them.
     val widgetCells = remember(widgets, cols) {
         buildSet {
@@ -556,7 +556,7 @@ private fun HomePage(
         }
     }
     // Cells occupied by apps and by widgets other than the one being edited (resized/moved).
-    val editingId = resize?.id ?: widgetMove?.id
+    val editingId = edit?.id
     val blocked = remember(pageApps, widgets, cols, editingId) {
         buildSet {
             addAll(pageApps.keys)
@@ -688,18 +688,27 @@ private fun HomePage(
             }
         }
 
+        // Tap empty space to drop the widget being moved or resized.
+        val dismissEdit by rememberUpdatedState {
+            edit?.let { onResizeWidget(it.id, page, it.row * cols + it.col, it.spanX, it.spanY) }
+            edit = null
+            dragOrigin = null
+        }
+        if (edit != null) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) { detectTapGestures { dismissEdit() } },
+            )
+        }
+
         // Widgets float above the cell grid, spanning their cells.
         for (w in widgets) {
-            // Active geometry comes from a live resize/move draft if one is in progress.
-            val edit = when {
-                resize?.id == w.appWidgetId -> resize
-                widgetMove?.id == w.appWidgetId -> widgetMove
-                else -> null
-            }
-            val col = edit?.col ?: (w.position % cols)
-            val row = edit?.row ?: (w.position / cols)
-            val sx = edit?.spanX ?: w.spanX
-            val sy = edit?.spanY ?: w.spanY
+            val live = edit?.takeIf { it.id == w.appWidgetId }
+            val col = live?.col ?: (w.position % cols)
+            val row = live?.row ?: (w.position / cols)
+            val sx = live?.spanX ?: w.spanX
+            val sy = live?.spanY ?: w.spanY
             val info = remember(w.appWidgetId) { widgetHost.providerInfo(w.appWidgetId) }
             WidgetCell(
                 placement = w,
@@ -707,79 +716,33 @@ private fun HomePage(
                 widgetHost = widgetHost,
                 col = col, row = row, spanX = sx, spanY = sy,
                 cellW = cellW, cellH = cellH, padX = padX, padY = padY,
-                moving = widgetMove?.id == w.appWidgetId,
-                resizable = info != null && info.resizeMode != AppWidgetProviderInfo.RESIZE_NONE,
-                onRemove = { onRemoveWidget(w.appWidgetId) },
-                onStartResize = {
-                    resize = ResizeDraft(
-                        w.appWidgetId, w.position % cols, w.position / cols, w.spanX, w.spanY,
-                    )
+                onEdit = {
+                    if (edit?.id != w.appWidgetId) dismissEdit()
+                    val start = ResizeDraft(w.appWidgetId, col, row, sx, sy)
+                    edit = start
+                    dragOrigin = start
+                    dragTotal = Offset.Zero
                 },
-                onStartMove = {
-                    widgetMove = ResizeDraft(
-                        w.appWidgetId, w.position % cols, w.position / cols, w.spanX, w.spanY,
-                    )
+                onDrag = { delta ->
+                    dragTotal += delta
+                    val start = dragOrigin
+                    if (start != null) {
+                        val nc = (start.col + (dragTotal.x / cellWpx).roundToInt())
+                            .coerceIn(0, cols - start.spanX)
+                        val nr = (start.row + (dragTotal.y / cellHpx).roundToInt())
+                            .coerceIn(0, rows - start.spanY)
+                        if (cellsClear(nc, nr, start.spanX, start.spanY, blocked, cols)) {
+                            edit = start.copy(col = nc, row = nr)
+                        }
+                    }
                 },
             )
         }
 
-        // Move overlay: drag the widget to a new cell; tap outside to finish.
-        widgetMove?.let { d ->
-            fun commitMove() {
-                widgetMove?.let { onResizeWidget(it.id, page, it.row * cols + it.col, it.spanX, it.spanY) }
-                widgetMove = null
-            }
-            Box(Modifier.fillMaxSize().pointerInput(d.id) { detectTapGestures { commitMove() } })
-            Box(
-                Modifier
-                    .offset(x = padX + cellW * d.col, y = padY + cellH * d.row)
-                    .size(width = cellW * d.spanX, height = cellH * d.spanY)
-                    .padding(4.dp)
-                    .border(BorderStroke(2.dp, MaterialTheme.colorScheme.primary), RoundedCornerShape(16.dp))
-                    .pointerInput(d.id) {
-                        var startCol = d.col
-                        var startRow = d.row
-                        var total = Offset.Zero
-                        detectDragGestures(
-                            onDragStart = {
-                                startCol = widgetMove?.col ?: d.col
-                                startRow = widgetMove?.row ?: d.row
-                                total = Offset.Zero
-                            },
-                            onDrag = { change, delta ->
-                                change.consume()
-                                total += delta
-                                val nc = (startCol + (total.x / cellWpx).roundToInt()).coerceIn(0, cols - d.spanX)
-                                val nr = (startRow + (total.y / cellHpx).roundToInt()).coerceIn(0, rows - d.spanY)
-                                widgetMove?.let { cur ->
-                                    if ((nc != cur.col || nr != cur.row) &&
-                                        cellsClear(nc, nr, cur.spanX, cur.spanY, blocked, cols)
-                                    ) {
-                                        widgetMove = cur.copy(col = nc, row = nr)
-                                    }
-                                }
-                            },
-                            onDragEnd = { commitMove() },
-                            onDragCancel = { commitMove() },
-                        )
-                    },
-            )
-        }
-
-        // Resize overlay for the active widget: tap-outside commits, edge handles resize.
-        resize?.let { d ->
+        // Resize handles and remove, while a widget is picked up.
+        edit?.let { d ->
             val info = remember(d.id) { widgetHost.providerInfo(d.id) }
             val mode = info?.resizeMode ?: AppWidgetProviderInfo.RESIZE_BOTH
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .pointerInput(d.id) {
-                        detectTapGestures {
-                            onResizeWidget(d.id, page, d.row * cols + d.col, d.spanX, d.spanY)
-                            resize = null
-                        }
-                    },
-            )
             WidgetResizeFrame(
                 draft = d,
                 cols = cols, rows = rows,
@@ -789,8 +752,25 @@ private fun HomePage(
                 canHorizontal = mode and AppWidgetProviderInfo.RESIZE_HORIZONTAL != 0,
                 canVertical = mode and AppWidgetProviderInfo.RESIZE_VERTICAL != 0,
                 blocked = blocked,
-                onChange = { resize = it },
+                onChange = { edit = it },
             )
+            Box(
+                Modifier
+                    .offset(x = padX + cellW * d.col + cellW * d.spanX - 36.dp, y = padY + cellH * d.row - 36.dp)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .pointerInput(d.id) {
+                        detectTapGestures {
+                            onRemoveWidget(d.id)
+                            edit = null
+                            dragOrigin = null
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.Close, contentDescription = "Remove widget", tint = Color(0xFF1C1C1E), modifier = Modifier.size(16.dp))
+            }
         }
     }
 }
@@ -808,22 +788,19 @@ private fun WidgetCell(
     cellH: Dp,
     padX: Dp,
     padY: Dp,
-    moving: Boolean,
-    resizable: Boolean,
-    onRemove: () -> Unit,
-    onStartResize: () -> Unit,
-    onStartMove: () -> Unit,
+    onEdit: () -> Unit,
+    onDrag: (Offset) -> Unit,
 ) {
-    var menu by remember { mutableStateOf(false) }
     val widthDp = (cellW.value * spanX).toInt()
     val heightDp = (cellH.value * spanY).toInt()
+    val editNow by rememberUpdatedState(onEdit)
+    val dragNow by rememberUpdatedState(onDrag)
     Box(
         Modifier
             .offset(x = padX + cellW * col, y = padY + cellH * row)
             .size(width = cellW * spanX, height = cellH * spanY)
             .padding(4.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .then(if (moving) Modifier.alpha(0f) else Modifier),
+            .clip(RoundedCornerShape(16.dp)),
     ) {
         if (info != null) {
             AndroidView(
@@ -844,33 +821,20 @@ private fun WidgetCell(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        // Capture layer: long-press opens the widget menu (Move / Resize / Remove).
+        // Long-press, then drag, to move. Handles for resizing appear above this.
         Box(
             Modifier
                 .matchParentSize()
                 .pointerInput(placement.appWidgetId) {
-                    detectTapGestures(onLongPress = { menu = true })
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { editNow() },
+                        onDrag = { change, delta ->
+                            change.consume()
+                            dragNow(delta)
+                        },
+                    )
                 },
         )
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(
-                text = { Text("Move") },
-                leadingIcon = { Icon(Icons.Default.OpenWith, contentDescription = null) },
-                onClick = { menu = false; onStartMove() },
-            )
-            if (resizable) {
-                DropdownMenuItem(
-                    text = { Text("Resize") },
-                    leadingIcon = { Icon(Icons.Default.OpenInFull, contentDescription = null) },
-                    onClick = { menu = false; onStartResize() },
-                )
-            }
-            DropdownMenuItem(
-                text = { Text("Remove widget") },
-                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                onClick = { menu = false; onRemove() },
-            )
-        }
     }
 }
 
